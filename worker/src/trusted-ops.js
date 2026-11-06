@@ -84,14 +84,19 @@ const TrustedOps = (() => {
   const settings = async c => Object.assign({}, DEFAULT_SETTINGS, (await c.tx.get('systemSettings', 'platform')) || {});
   const me = async c => {
     need(c.uid, 'unauthenticated', 'Please sign in first.');
-    const u = await c.tx.get('users', c.uid);
+    let u = await c.tx.get('users', c.uid);
+    if (!u) {
+      /* Staff accounts are created on the server and may have no member profile: their adminRoles document stands in for it. */
+      const a = await c.tx.get('adminRoles', c.uid);
+      if (a && ADMIN_ROLES[a.role]) u = { id: c.uid, uid: c.uid, name: a.name || 'SportsHub-KE staff', roles: ['admin'], status: 'active', registrationStatus: 'paid', staffOnly: true };
+    }
     need(u, 'failed-precondition', 'Your account profile is incomplete.');
     need(u.status !== 'suspended', 'permission-denied', 'This account is suspended. Please contact support.');
     return u;
   };
   const adminOf = async c => { if (!c.uid) return null; const a = await c.tx.get('adminRoles', c.uid); return a ? a.role : null; };
   const requirePerm = async (c, perm) => {
-    const u = await me(c), role = await adminOf(c);
+    const role = await adminOf(c), u = await me(c);
     need(can(role, perm), 'permission-denied', 'Your administrator role does not permit this action.');
     return { user: u, role };
   };
@@ -594,8 +599,8 @@ const TrustedOps = (() => {
     /* ===== Games ===== */
     async createGame(c, p) {
       const u = await me(c), s = await settings(c), sport = await c.tx.get('sports', str(p.sportId, 'Sport'));
-      need(sport, 'not-found', 'Sport not found.');
-      need(u.registrationStatus === 'paid', 'failed-precondition', 'Complete your one-time registration to host games.');
+      need(sport, 'not-found', 'Sport not found. An administrator needs to load the sports catalogue (run worker/seed.mjs or /setup).');
+      need(u.registrationStatus === 'paid' || can(await adminOf(c), 'games'), 'failed-precondition', 'Complete your one-time registration to host games.');
       need(!u.isMinor, 'permission-denied', 'Players under 18 cannot host open games.');
       const start = iso(p.start, 'Start time'), end = iso(p.end, 'End time');
       need(start > c.now, 'invalid-argument', 'The game must start in the future.');

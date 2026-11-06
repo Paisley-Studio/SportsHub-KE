@@ -42,6 +42,11 @@ Vanilla multi-page JavaScript site (ES modules, no framework, no build step) on 
 - Secrets go in through `npx wrangler secret put`, never committed: `FIREBASE_SERVICE_ACCOUNT`, `SUPERADMIN_EMAIL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `MPESA_CALLBACK_TOKEN`, `RESEND_API_KEY`.
 - Cloudflare free plan: 50 subrequests per request. Every Firestore read, query or commit is one subrequest, so keep operations from reading documents one by one in long loops.
 
+## Seeding a new project
+
+- `cd worker && node seed.mjs` writes the sports catalogue (`sports/<id>`, same records as `/setup`) and fills any missing `systemSettings/platform` fields, using `worker/key.json`. Safe to re-run. Without sports, game and tournament creation fails with "Sport not found".
+- Staff accounts need only `adminRoles/<uid>` with a role from `ADMIN_ROLES` (e.g. `super`). No `users` document is required: `me()` in `trusted-ops.js` and `refreshSession()` in `ui.js` stand one in.
+
 ## Payments (Lipa na M-Pesa, manual confirmation)
 
 - `PAYMENT_PROVIDER = "mpesa_manual"`. Members send money to the number in `systemSettings/platform.mpesaNumber` (default 0720274530, editable in System configuration), then enter the 10-character M-Pesa code in the payment window (`paymentFlow` in `features.js`).

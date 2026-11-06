@@ -11,8 +11,8 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import TrustedOps from './trusted-ops.js';
-import { runTransaction, db, autoId, emulated } from './firestore.js';
-import { emailNotifications } from './email.js';
+import { runTransaction, db, autoId, emulated, accessToken } from './firestore.js';
+import { emailNotifications, renderEmail, sendEmails } from './email.js';
 
 /* ----- Responses and errors ----- */
 class ApiError extends Error { constructor(status, code, message) { super(message); this.status = status; this.code = code; } }
@@ -80,7 +80,7 @@ const readBody = async req => { try { return (await req.json()) || {}; } catch {
 const newId = pre => `${pre}_${autoId()}`;
 const opEnv = env => ({
   allowSimulation: env.ALLOW_SIMULATED_PAYMENTS === 'true',
-  paymentProvider: env.PAYMENT_PROVIDER || 'simulation',
+  paymentProvider: env.PAYMENT_PROVIDER || 'mpesa_manual',
   trustedCaller: false,
   relaxAttendance: emulated(env) && env.RELAX_ATTENDANCE === 'true'
 });
@@ -127,7 +127,7 @@ async function trustedOp(req, env, op, payload, ctx) {
   if (op === 'registerAccount' && user.email && !(payload && payload.email)) payload = { ...(payload || {}), email: user.email };
   const result = await runOp(env, op, uid, payload, {}, ctx);
   /* Hand off to the configured provider once the pending transaction is safely stored. */
-  const providerName = env.PAYMENT_PROVIDER || 'simulation';
+  const providerName = env.PAYMENT_PROVIDER || 'mpesa_manual';
   if (result && result.txId && providerName !== 'simulation' && ['paymentInitiate', 'placeOrder'].includes(op)) {
     const provider = PROVIDERS[providerName];
     if (!provider) throw new ApiError(412, 'failed-precondition', `Payment provider "${providerName}" is not installed.`);
@@ -235,6 +235,38 @@ async function serveFile(req, env, key) {
   return new Response(obj.body, { headers: h });
 }
 
+/* ----- Password reset, sent as a SportsHub email -----
+   Firebase's own reset email comes from a shared firebaseapp.com address that inboxes often file as spam.
+   Here Firebase Auth makes the one-time code, and the email goes from the SportsHub domain (signed for it in Resend)
+   with a link to the site's own reset page, which signs the member in and sends them on to their dashboard.
+   The answer is the same whether or not the address has an account, so nobody can probe for members. */
+async function passwordReset(req, env) {
+  const { email } = await readBody(req), addr = String(email || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(addr) || addr.length > 200) throw new ApiError(400, 'invalid-argument', 'Enter a valid email address.');
+  await rateLimit(env, `reset:${req.headers.get('CF-Connecting-IP') || 'unknown'}`);
+  /* Until SportsHub email is set up, the browser asks Firebase to send its standard email instead. */
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return { fallback: true };
+  const idt = env.FIREBASE_AUTH_EMULATOR_HOST ? `http://${env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com` : 'https://identitytoolkit.googleapis.com';
+  const r = await fetch(`${idt}/v1/projects/${env.FIREBASE_PROJECT_ID}/accounts:sendOobCode`, {
+    method: 'POST', headers: { Authorization: `Bearer ${await accessToken(env)}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestType: 'PASSWORD_RESET', email: addr, returnOobLink: true })
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.oobLink) {
+    if (/EMAIL_NOT_FOUND|USER_NOT_FOUND/.test((j.error && j.error.message) || '')) return { ok: true };
+    console.error('Reset link failed:', r.status, j.error && j.error.message);
+    return { fallback: true };
+  }
+  const code = new URL(j.oobLink).searchParams.get('oobCode');
+  const site = (env.SITE_URL || 'https://sportshub.co.ke').replace(/\/+$/, '');
+  const url = `${site}/auth/action/?mode=resetPassword&oobCode=${encodeURIComponent(code)}`;
+  const { html, text } = renderEmail({ site, name: '', type: 'account', title: 'Reset your SportsHub-KE password',
+    body: `We received a request to reset the password for ${addr}. Choose a new password with the button below. The link works for one hour and only once.`,
+    url, cta: 'Choose a new password', note: 'If you did not ask for this, you can ignore this email. Your password stays the same.' });
+  const sent = await sendEmails(env, [{ from: env.EMAIL_FROM, to: [addr], subject: 'Reset your SportsHub-KE password', html, text, ...(env.EMAIL_REPLY_TO ? { reply_to: env.EMAIL_REPLY_TO } : {}) }]);
+  return sent ? { ok: true } : { fallback: true };
+}
+
 /* ----- Live sitemap: every public record, so Google finds each game, venue, coach, team and product -----
    Declared in the site's robots.txt. Only public records are listed (the Worker reads past the security rules). */
 async function sitemap(env, ctx, req) {
@@ -269,6 +301,7 @@ export default {
       if (req.method === 'POST') {
         if (pathname === '/create-account') return json(req, env, await trustedOp(req, env, 'registerAccount', await readBody(req), ctx));
         if (pathname === '/op') { const { op, payload } = await readBody(req); return json(req, env, await trustedOp(req, env, String(op || ''), payload, ctx)); }
+        if (pathname === '/password-reset') return json(req, env, await passwordReset(req, env));
         if (pathname === '/get-upload-url') return json(req, env, await uploadUrl(req, env));
         if (pathname === '/mpesa-callback') return await mpesaCallback(req, env, ctx);
       }

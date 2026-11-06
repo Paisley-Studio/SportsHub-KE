@@ -39,9 +39,9 @@
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 <noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
 <script type="module">
-import { html } from '/shared/js/core.js';
+import { html, ic } from '/shared/js/core.js';
 import { auth } from '/shared/js/firebase.js';
-import { S, A, F, toast, fld, promptForm, go, route, refreshSession, ROLE_HOME } from '/shared/js/ui.js';
+import { S, A, F, toast, fld, promptForm, go, route, refreshSession, ROLE_HOME, onMount } from '/shared/js/ui.js';
 import { authShell, googleBtn } from '/shared/js/features.js';
 
 F.signIn = async v => {
@@ -58,12 +58,15 @@ A.forgotPassword = async () => {
   const v = await promptForm({ title: 'Reset your password', fields: fld({ name: 'email', label: 'Email', type: 'email', required: true, full: true }), submit: 'Send reset link' });
   if (!v) return;
   await auth.reset(v.email);
-  toast('If that email has an account, a reset link is on its way.');
+  toast('If that email has an account, a reset link is on its way. Check your inbox.', 'green');
 };
 route('/signin', async () => {
   if (S.uid) { go(S.user ? '/app' : '/join', true); return undefined; }
+  /* ?forgot=1 opens the reset form; ?reset=1 confirms a password was just changed. */
+  if (S.query.forgot) onMount(() => setTimeout(() => A.forgotPassword(), 300));
   return authShell('javelin', 'An athlete throwing a javelin', html`<div class="auth-card">
     <div class="stack"><span class="eyebrow rv f">Sign in</span><h1><span class="lnr"><span>Welcome back.</span></span></h1><p class="muted rv u" style="--d:.15s">Your games, sessions and team are where you left them.</p></div>
+    ${S.query.reset ? html`<div class="notice c-green small">${ic('circle-check')} Your password is changed. Sign in with your new password and you will go straight to your dashboard.</div>` : ''}
     <div class="stack rv u" style="--d:.25s">${googleBtn('Continue with Google')}<div class="or">or with email</div>
       <form class="form" data-form="signIn">${fld({ name: 'email', label: 'Email', type: 'email', required: true, auto: 'email' })}${fld({ name: 'password', label: 'Password', type: 'password', required: true, auto: 'current-password' })}<p class="form-err err hide"></p><button class="btn btn-block" type="submit">Sign in</button></form>
       <div class="row between small"><button class="semi muted" data-act="forgotPassword">Forgot password?</button><span class="muted">New here? <a class="semi" style="color:var(--ink)" href="#/join">Create an account</a></span></div></div></div>`,

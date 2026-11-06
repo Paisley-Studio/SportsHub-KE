@@ -3,7 +3,8 @@
    get, query, set, update, del. Reads see earlier writes in the same operation; writes are buffered
    and sent in one atomic commit. Firestore retries are handled here. */
 
-const SCOPE = 'https://www.googleapis.com/auth/datastore';
+/* Firestore, plus Firebase Auth (Identity Toolkit) for password-reset links. */
+const SCOPE = 'https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/identitytoolkit';
 const te = new TextEncoder();
 const b64u = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const b64uStr = s => b64u(te.encode(s));
@@ -15,7 +16,7 @@ const root = env => `projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/doc
 
 /* ----- Service account access token (cached for most of its hour) ----- */
 let token = null, tokenUntil = 0;
-async function accessToken(env) {
+export async function accessToken(env) {
   if (emulated(env)) return 'owner';
   if (token && Date.now() < tokenUntil) return token;
   if (!env.FIREBASE_SERVICE_ACCOUNT) throw new Error('FIREBASE_SERVICE_ACCOUNT secret is not set.');

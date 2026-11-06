@@ -38,8 +38,8 @@ export const realUrl = (site, link) => {
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 /* The one SportsHub email layout: table-based so it holds together in Gmail, Outlook and phone mail apps. */
-export function renderEmail({ site, name, type, title, body, link }) {
-  const [c, label] = TYPE[type] || ['blue', 'SportsHub'], accent = COLOR[c], url = realUrl(site, link), year = new Date().getFullYear();
+export function renderEmail({ site, name, type, title, body, link, url: direct, cta = 'Open SportsHub', note = '' }) {
+  const [c, label] = TYPE[type] || ['blue', 'SportsHub'], accent = COLOR[c], url = direct || realUrl(site, link), year = new Date().getFullYear();
   const bar = ['blue', 'green', 'magenta', 'yellow'].map(k => `<td width="25%" style="height:5px;background:${COLOR[k]};font-size:0;line-height:0">&nbsp;</td>`).join('');
   const font = "'Quicksand','Segoe UI',Roboto,Helvetica,Arial,sans-serif";
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${esc(title)}</title>
@@ -58,8 +58,8 @@ export function renderEmail({ site, name, type, title, body, link }) {
       ${body ? `<p style="margin:0 0 22px;font-family:${font};font-size:15px;line-height:1.65;color:#4A4F59">${esc(body)}</p>` : ''}
     </td></tr>
     <tr><td style="padding:4px 30px 30px"><table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:999px;background:${accent}">
-      <a href="${url}" style="display:inline-block;padding:13px 28px;font-family:${font};font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${c === 'yellow' ? '#1A1D23' : '#FFFFFF'};text-decoration:none;border-radius:999px">Open SportsHub</a>
-    </td></tr></table></td></tr></table>
+      <a href="${url}" style="display:inline-block;padding:13px 28px;font-family:${font};font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:${c === 'yellow' ? '#1A1D23' : '#FFFFFF'};text-decoration:none;border-radius:999px">${esc(cta)}</a>
+    </td></tr></table>${note ? `<p style="margin:18px 0 0;font-family:${font};font-size:13px;line-height:1.6;color:#6F7480">${esc(note)}</p>` : ''}</td></tr></table>
   </td></tr>
   <tr><td style="padding:20px 6px 0;font-family:${font};font-size:12px;line-height:1.6;color:#6F7480">
     One platform. Every sport. Every player.<br>
@@ -67,7 +67,7 @@ export function renderEmail({ site, name, type, title, body, link }) {
     &copy; ${year} SportsHub-KE, Kenya
   </td></tr>
 </table></td></tr></table></body></html>`;
-  const textBody = `Hi ${name || 'there'},\n\n${title}\n${body || ''}\n\nOpen SportsHub: ${url}\n\nSportsHub-KE. One platform. Every sport. Every player.`;
+  const textBody = `Hi ${name || 'there'},\n\n${title}\n${body || ''}\n\n${cta}: ${url}\n${note ? `\n${note}\n` : ''}\nSportsHub-KE. One platform. Every sport. Every player.`;
   return { html, text: textBody };
 }
 
@@ -88,8 +88,14 @@ export async function emailNotifications(env, notes) {
     const { html, text } = renderEmail({ site, name: String(u.name || '').split(' ')[0], type: n.type, title: n.title, body: n.body, link: n.link });
     msgs.push({ from: env.EMAIL_FROM, to: [to], subject: n.title, html, text, ...(env.EMAIL_REPLY_TO ? { reply_to: env.EMAIL_REPLY_TO } : {}) });
   }
+  await sendEmails(env, msgs);
+}
+/* Sends prepared messages through Resend, 100 per request. Resolves true when every batch was accepted. */
+export async function sendEmails(env, msgs) {
+  let ok = true;
   for (let i = 0; i < msgs.length; i += 100) {
     const r = await fetch('https://api.resend.com/emails/batch', { method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(msgs.slice(i, i + 100)) }).catch(e => ({ ok: false, statusText: e.message }));
-    if (!r.ok) console.error('Email send failed:', r.status, await (r.text ? r.text() : r.statusText));
+    if (!r.ok) { ok = false; console.error('Email send failed:', r.status, await (r.text ? r.text() : r.statusText)); }
   }
+  return ok;
 }

@@ -193,7 +193,7 @@ A.adminReset = async () => {
   const v = await promptForm({ title: 'Reset your password', fields: fld({ name: 'email', label: 'Administrator email', type: 'email', required: true, full: true }), submit: 'Send reset link' });
   if (!v) return;
   await auth.reset(v.email).catch(() => {});
-  toast('If that email has an account, a reset link is on its way.');
+  toast('If that email has an account, a reset link is on its way. Check your inbox.', 'green');
 };
 /* Location. Members choose whether to share it. Player and coach positions are rounded to about 1 km. */
 export const geoField = (precise = false) => html`<div class="full geo" data-geo><input type="hidden" name="lat" value=""><input type="hidden" name="lng" value="">

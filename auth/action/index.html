@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reset your password | SportsHub-KE</title>
+<meta name="description" content="Choose a new SportsHub-KE password.">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#FFFAF2">
+<meta name="application-name" content="SportsHub-KE">
+<meta name="apple-mobile-web-app-title" content="SportsHub-KE">
+<meta name="format-detection" content="telephone=no">
+<meta name="geo.region" content="KE">
+<meta name="geo.placename" content="Nairobi, Kenya">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
+<link rel="dns-prefetch" href="https://securetoken.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/config.js">
+<link rel="modulepreload" href="/shared/js/core.js">
+<link rel="modulepreload" href="/shared/js/firebase.js">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="/shared/js/features.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+<script type="speculationrules">{"prerender":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/auth/*","/admin/*","/setup/*","/marketplace/checkout/*","/dashboard/notifications/*","/dashboard/messages/*","/*\\?*page=*"]}},{"not":{"selector_matches":"[data-act], [target], [download], .no-prerender"}}]},"eagerness":"moderate"}],"prefetch":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/admin/*","/setup/*"]}},{"not":{"selector_matches":"[data-act], [target], [download]"}}]},"eagerness":"moderate"}]}</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic } from '/shared/js/core.js';
+import { auth } from '/shared/js/firebase.js';
+import { S, A, F, fld, route, refreshSession, renderMain, toast, toUrl, ROLE_HOME } from '/shared/js/ui.js';
+import { authShell } from '/shared/js/features.js';
+
+/* ----- Email links: choose a new password, then straight back to your dashboard ----- */
+const st = S.ui.reset = S.ui.reset || { step: 'check' };
+const homeFor = () => (S.adminRole && S.activeRole === 'admin' ? '/admin/' : toUrl(ROLE_HOME[S.activeRole] || '/app'));
+const card = inner => authShell('reset', 'SportsHub-KE', html`<div class="auth-card">${inner}</div>`, 'Every sport. Every player.', 'blue', 'Back in the game in a minute.');
+
+F.newPassword = async v => {
+  if (String(v.password).length < 8) throw new Error('Use at least 8 characters.');
+  if (v.password !== v.confirm) throw new Error('The two passwords do not match.');
+  S.registering = true; /* This page finishes the sign-in itself. */
+  try {
+    await auth.confirmReset(st.code, v.password).catch(e => { throw new Error(/expired|invalid-action/i.test(e.code || '') ? 'This link has expired or was already used. Ask for a new one below.' : e.message); });
+    try { await auth.signIn(st.email, v.password); await refreshSession(); } catch (e) { /* Changed, but sign-in failed: the button goes to sign-in. */ }
+  } finally { S.registering = false; }
+  st.step = 'done';
+  await renderMain();
+};
+A.newResetLink = async () => {
+  if (!st.email) { location.assign('/auth/login/'); return; }
+  await auth.reset(st.email);
+  toast('A new link is on its way. Check your inbox.', 'green');
+};
+
+route('/auth/action', async () => {
+  const q = S.query, mode = q.mode || '';
+  st.code = q.oobCode || st.code;
+  if (mode !== 'resetPassword' || !st.code) {
+    return card(html`<div class="stack"><span class="eyebrow">Account</span><h1>This link is not complete.</h1><p class="muted">Open the newest link from your SportsHub-KE email, or ask for a new one.</p></div>
+      <a class="btn btn-block" href="/auth/login/">Go to sign in</a>`);
+  }
+  if (st.step === 'check') {
+    try { st.email = await auth.verifyReset(st.code); st.step = 'form'; }
+    catch (e) { st.step = 'expired'; }
+  }
+  if (st.step === 'expired') {
+    return card(html`<div class="stack"><span class="eyebrow">Password reset</span><h1>This link has expired.</h1><p class="muted">Reset links work for one hour and only once. Ask for a new one from the sign-in page.</p></div>
+      <a class="btn btn-block" href="/auth/login/?forgot=1">Send me a new link</a>`);
+  }
+  if (st.step === 'done') {
+    const signedIn = !!S.user;
+    return card(html`<div class="stack reset-done"><span class="rd-ic">${ic('circle-check')}</span><span class="eyebrow">All set</span><h1>Your password is changed.</h1>
+      <p class="muted">${signedIn ? `You are signed in as ${st.email}. Pick up where you left off.` : `Sign in with ${st.email} and your new password.`}</p></div>
+      ${signedIn ? html`<a class="btn btn-green btn-block" href="${homeFor()}">${ic('layout-dashboard')} Go to my dashboard</a><a class="btn btn-ghost btn-block" href="/">Back to the home page</a>`
+        : html`<a class="btn btn-block" href="/auth/login/?reset=1">Sign in</a>`}`);
+  }
+  return card(html`<div class="stack"><span class="eyebrow">Password reset</span><h1>Choose a new password.</h1><p class="muted">For <b>${st.email}</b>. You will be signed in straight after.</p></div>
+    <form class="form" data-form="newPassword">${fld({ name: 'password', label: 'New password', type: 'password', required: true, auto: 'new-password', min: 8, hint: 'At least 8 characters.' })}${fld({ name: 'confirm', label: 'Type it again', type: 'password', required: true, auto: 'new-password', min: 8 })}
+      <input type="email" name="username" value="${st.email}" autocomplete="username" hidden>
+      <p class="form-err err hide"></p><button class="btn btn-block" type="submit">${ic('check')} Save and continue</button></form>
+    <p class="small muted">Remembered it? <a class="semi" style="color:var(--ink)" href="/auth/login/">Sign in instead</a></p>`);
+}, { title: 'Reset your password', shell: 'auth' });
+</script>
+</body>
+</html>

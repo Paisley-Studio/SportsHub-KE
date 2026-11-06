@@ -1108,3 +1108,6 @@ body:not([data-ready="1"]) .site-foot,body:not([data-ready="1"]) .up{display:non
 .rk a{color:var(--ink);display:inline-flex;align-items:center;gap:4px}.rk a .i{width:13px;height:13px}
 .trend-up{color:#238332;font-weight:700}.trend-down{color:var(--magenta-d);font-weight:700}
 .field input.mp-code::placeholder{letter-spacing:.04em;text-transform:none;font-weight:500;font-size:1rem}
+/* ----- Password reset finished ----- */
+.reset-done .rd-ic{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;background:var(--green-t);color:var(--green)}
+.reset-done .rd-ic .i{width:28px;height:28px}

@@ -107,7 +107,24 @@ export const auth = {
     }
   },
   async signOut() { cacheClear(); await authApi.signOut(fbAuth); },
-  async reset(email) { await authApi.sendPasswordResetEmail(fbAuth, email); }
+  /* Password reset. The SportsHub server sends a branded email from the SportsHub domain (not filed as spam),
+     linking to /auth/action/. If its email is not set up yet, Firebase sends its standard email, whose page
+     then offers a Continue button back to sign-in. */
+  async reset(email) {
+    const r = await api('/password-reset', { email }).catch(e => { if (e.code === 'invalid-argument' || e.code === 'resource-exhausted') throw e; return { fallback: true }; });
+    if (!r || !r.fallback) return;
+    const back = { url: `${location.origin}/auth/login/?reset=1` };
+    try { await authApi.sendPasswordResetEmail(fbAuth, email, back); }
+    catch (e) {
+      if (e.code === 'auth/user-not-found') return; /* Same answer either way, so addresses cannot be probed. */
+      if (/continue-uri|unauthorized/i.test(e.code || '')) { await authApi.sendPasswordResetEmail(fbAuth, email).catch(() => {}); return; }
+      if (e.code === 'auth/too-many-requests') throw new Error('Too many reset requests. Please wait a few minutes and try again.');
+      throw e;
+    }
+  },
+  /* The reset page: check the link, then save the new password. */
+  verifyReset: code => authApi.verifyPasswordResetCode(fbAuth, code),
+  confirmReset: (code, password) => authApi.confirmPasswordReset(fbAuth, code, password)
 };
 const emulatorsUp = async () => {
   try { const c = new AbortController(), t = setTimeout(() => c.abort(), 2500); await fetch(`http://${location.hostname}:8080/`, { signal: c.signal, mode: 'no-cors' }); clearTimeout(t); return true; }

@@ -328,6 +328,8 @@ export const startPage = () => {
   if (meta.auth && !S.uid) { S.afterLogin = location.pathname + location.search; location.replace('/auth/login/'); return; }
   if (meta.auth && !S.user && !location.pathname.startsWith('/auth/')) { location.replace('/auth/register/'); return; }
   if (meta.admin && !S.adminRole) { location.replace(S.uid ? '/dashboard/' : '/auth/login/'); return; }
+  /* An administrator with no member profile has only the admin dashboard. */
+  if (meta.auth && !meta.admin && S.user && S.user.staffOnly) { location.replace('/admin/'); return; }
   if (S.shell === 'public') { const h = $('.head-acts'); if (h) { h.innerHTML = headActs().s; const d = $('.d-acts'); if (d) d.innerHTML = drawerActs().s; rewriteLinks(); } }
   else drawShell();
   const box = slot();
@@ -449,7 +451,10 @@ export async function refreshSession() {
   S.uid = auth.uid();
   if (!S.uid) { Object.assign(S, { user: null, profile: null, membership: null, period: null, adminRole: null, activeRole: null, cart: [] }); return; }
   const [user, profile, membership, adminDoc, cart] = await Promise.all([db.get('users', S.uid), db.get('playerProfiles', S.uid), db.get('memberships', S.uid), db.get('adminRoles', S.uid, true), db.get('carts', S.uid)]); /* Administrator access is always read live, never from the instant cache. */
-  S.user = user; S.profile = profile; S.membership = membership; S.adminRole = adminDoc ? adminDoc.role : null; S.cart = (cart && cart.items) || [];
+  /* Staff accounts are created on the server and may have no member profile. They are never sent to registration. */
+  const me = auth.current() || {};
+  S.user = user || (adminDoc ? { id: S.uid, uid: S.uid, name: adminDoc.name || me.name || (me.email || 'Administrator').split('@')[0], email: me.email || '', roles: ['admin'], staffOnly: true } : null);
+  S.profile = profile; S.membership = membership; S.adminRole = adminDoc ? adminDoc.role : null; S.cart = (cart && cart.items) || [];
   S.period = membership && membership.currentPeriodId ? await db.get('membershipPeriods', membership.currentPeriodId) : null;
   S.origin = S.origin && S.origin.precise ? S.origin : profile && profile.county ? countyLatLng(profile.county) : user && user.county ? countyLatLng(user.county) : null;
   const avail = rolesAvailable();

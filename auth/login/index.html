@@ -61,7 +61,7 @@ A.forgotPassword = async () => {
   toast('If that email has an account, a reset link is on its way. Check your inbox.', 'green');
 };
 route('/signin', async () => {
-  if (S.uid) { go(S.user ? '/app' : '/join', true); return undefined; }
+  if (S.uid) { go(!S.user ? '/join' : S.activeRole === 'admin' ? '/admin' : '/app', true); return undefined; }
   /* ?forgot=1 opens the reset form; ?reset=1 confirms a password was just changed. */
   if (S.query.forgot) onMount(() => setTimeout(() => A.forgotPassword(), 300));
   return authShell('javelin', 'An athlete throwing a javelin', html`<div class="auth-card">

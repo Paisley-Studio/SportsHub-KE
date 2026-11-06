@@ -184,7 +184,31 @@ F.adminSignIn = async v => {
     try { await auth.signIn(v.email, v.password); }
     catch (e) { throw new Error(/invalid|wrong|not-found|credential/i.test(e.code || e.message) ? 'That email and password do not match.' : /too-many/i.test(e.code || '') ? 'Too many attempts. Please wait a few minutes and try again.' : e.message); }
     await refreshSession();
-    if (!S.adminRole) { await auth.signOut(); await refreshSession(); throw new Error('This account does not have administrator access.'); }
+    
+    /* 
+      FIX: The original code relied purely on S.adminRole which is populated by the cached session.
+      We will explicitly check the 'users' collection AND the 'admin' collection directly from Firestore.
+    */
+    let isAdmin = !!S.adminRole;
+    if (!isAdmin && S.uid) {
+      try {
+        const userDoc = await db.get('users', S.uid);
+        if (userDoc && userDoc.role === 'admin') isAdmin = true;
+        
+        if (!isAdmin) {
+          const adminDoc = await db.get('admin', S.uid);
+          if (adminDoc && adminDoc.role === 'admin') isAdmin = true;
+        }
+      } catch(e) {
+        console.error("Error verifying admin status:", e);
+      }
+    }
+
+    if (!isAdmin) { 
+      await auth.signOut(); 
+      await refreshSession(); 
+      throw new Error('This account does not have administrator access.'); 
+    }
   } finally { S.registering = false; }
   location.replace(location.pathname + location.search); /* Reopen the address with the administrator signed in. */
   await new Promise(() => {}); /* Keep the button spinning while the page reloads. */

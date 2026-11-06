@@ -448,7 +448,7 @@ export let sessionUnsubs = [];
 export async function refreshSession() {
   S.uid = auth.uid();
   if (!S.uid) { Object.assign(S, { user: null, profile: null, membership: null, period: null, adminRole: null, activeRole: null, cart: [] }); return; }
-  const [user, profile, membership, adminDoc, cart] = await Promise.all([db.get('users', S.uid), db.get('playerProfiles', S.uid), db.get('memberships', S.uid), db.get('adminRoles', S.uid), db.get('carts', S.uid)]);
+  const [user, profile, membership, adminDoc, cart] = await Promise.all([db.get('users', S.uid), db.get('playerProfiles', S.uid), db.get('memberships', S.uid), db.get('adminRoles', S.uid, true), db.get('carts', S.uid)]); /* Administrator access is always read live, never from the instant cache. */
   S.user = user; S.profile = profile; S.membership = membership; S.adminRole = adminDoc ? adminDoc.role : null; S.cart = (cart && cart.items) || [];
   S.period = membership && membership.currentPeriodId ? await db.get('membershipPeriods', membership.currentPeriodId) : null;
   S.origin = S.origin && S.origin.precise ? S.origin : profile && profile.county ? countyLatLng(profile.county) : user && user.county ? countyLatLng(user.county) : null;

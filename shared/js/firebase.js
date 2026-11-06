@@ -62,8 +62,9 @@ const liveGet = async (c, i) => { const d = await F.getDoc(F.doc(fs, c, i)); ret
 const writeDone = () => cacheClear();
 
 export const db = {
-  async get(c, i) {
-    try { return await cached('get', c, i, () => liveGet(c, i)); }
+  /* fresh: skip the instant cache (used for access checks such as administrator roles). */
+  async get(c, i, fresh = false) {
+    try { if (fresh) { const v = await liveGet(c, i); cWrite(`${CK}${who()}|get|${c}|${keyOf(i)}`, v); return v; } return await cached('get', c, i, () => liveGet(c, i)); }
     catch (e) { if (e.code === 'permission-denied') return null; throw e; }
   },
   /* A query the user may not read, or one whose index is missing or still building (failed-precondition),

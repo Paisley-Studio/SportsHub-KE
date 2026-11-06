@@ -5,22 +5,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Settings | SportsHub-KE</title>
 <meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#FFFAF2">
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="SportsHub-KE">
-<meta property="og:title" content="Settings | SportsHub-KE">
-<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
-<meta property="og:image" content="/assets/photos/brand-banner.webp">
-<meta name="twitter:card" content="summary_large_image">
+<meta name="application-name" content="SportsHub-KE">
+<meta name="apple-mobile-web-app-title" content="SportsHub-KE">
+<meta name="format-detection" content="telephone=no">
+<meta name="geo.region" content="KE">
+<meta name="geo.placename" content="Nairobi, Kenya">
 <link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
+<link rel="dns-prefetch" href="https://securetoken.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/config.js">
+<link rel="modulepreload" href="/shared/js/core.js">
+<link rel="modulepreload" href="/shared/js/firebase.js">
 <link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="/shared/js/features.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+<script type="speculationrules">{"prerender":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/auth/*","/admin/*","/setup/*","/marketplace/checkout/*","/dashboard/notifications/*","/dashboard/messages/*","/*\\?*page=*"]}},{"not":{"selector_matches":"[data-act], [target], [download], .no-prerender"}}]},"eagerness":"moderate"}],"prefetch":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/admin/*","/setup/*"]}},{"not":{"selector_matches":"[data-act], [target], [download]"}}]},"eagerness":"moderate"}]}</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -48,7 +57,7 @@ appRoute('/app/settings', async () => {
     <section class="panel"><h3 class="mb">Roles on this account</h3><p class="small muted mb">One account can hold many roles. Add another below.</p><div class="row">${rolesAvailable().map(r => html`<span class="tag">${ROLE_LABEL[r]}</span>`)}</div>
       ${verifs.length ? html`<div class="lines small mt">${verifs.map(v => html`<div class="row between"><span>${titleCase(v.kind)}: ${v.orgName}</span>${badge(v.status)}</div>`)}</div>` : ''}
       <div class="row mt">${!hasRole('captain') ? html`<a class="btn btn-ghost btn-sm" href="#/app/teams/new">Register a team</a>` : ''}${!hasRole('coach') && !hasRole('coach_applicant') ? html`<a class="btn btn-ghost btn-sm" href="#/join/coach">Apply as a coach</a>` : ''}${!hasRole('vendor') && !hasRole('vendor_applicant') ? html`<a class="btn btn-ghost btn-sm" href="#/join/vendor">Open a store</a>` : ''}<a class="btn btn-ghost btn-sm" href="#/join/facility">List a facility</a>${!hasRole('organiser') ? html`<a class="btn btn-ghost btn-sm" href="#/join/organisation">Become an organiser</a>` : ''}${!hasRole('scout') ? html`<a class="btn btn-ghost btn-sm" href="#/join/scout">Become a scout</a>` : ''}</div></section>
-    <section class="panel"><h3 class="mb">Notification preferences</h3><form class="form" data-form="savePrefs"><div class="form-grid">${NOTIF_TYPES.map(([k, l]) => fld({ name: k, label: l, type: 'tick', value: prefs[k] !== false }))}</div><p class="xs faint">In-app today. Email, SMS and push providers connect through the same preferences.</p><button class="btn btn-sm" type="submit" style="justify-self:start">Save preferences</button></form></section>
+    <section class="panel"><h3 class="mb">Notification preferences</h3><form class="form" data-form="savePrefs"><div class="form-grid">${NOTIF_TYPES.map(([k, l]) => fld({ name: k, label: l, type: 'tick', value: prefs[k] !== false }))}</div><p class="xs faint">Sent in the app and by email. Payment, account and application emails always go out.</p><button class="btn btn-sm" type="submit" style="justify-self:start">Save preferences</button></form></section>
     <section class="panel"><h3 class="mb">Your data</h3><p class="small muted mb">Under the Kenya Data Protection Act, 2019 you can ask us to delete your personal data. Financial records may be kept where the law requires.</p>${del ? html`<div class="row">${badge(del.status)}<span class="small muted">Requested ${fmtDate(del.at)}</span></div>` : html`<button class="btn btn-bad btn-sm" data-act="requestDeletion">Request account deletion</button>`} <a class="small semi" href="#/legal/privacy" style="margin-left:10px">Privacy policy</a></section>
     <section class="panel"><button class="btn btn-ghost" data-act="signOut">${ic('log-out')} Sign out</button></section></div>`);
 }, 'Settings');

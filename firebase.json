@@ -18,7 +18,9 @@
       "functions/**",
       "worker/**",
       "cors.json",
-      "CLAUDE.md"
+      "CLAUDE.md",
+      "firestore-debug.log",
+      "Img/**"
     ],
     "headers": [
       {
@@ -26,7 +28,7 @@
         "headers": [
           {
             "key": "Cache-Control",
-            "value": "public, max-age=3600"
+            "value": "public, max-age=3600, stale-while-revalidate=604800"
           }
         ]
       },
@@ -35,7 +37,16 @@
         "headers": [
           {
             "key": "Cache-Control",
-            "value": "public, max-age=2592000"
+            "value": "public, max-age=2592000, stale-while-revalidate=2592000"
+          }
+        ]
+      },
+      {
+        "source": "/@(sitemap.xml|robots.txt)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=3600"
           }
         ]
       },

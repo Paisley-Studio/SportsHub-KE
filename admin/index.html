@@ -5,22 +5,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Command centre | SportsHub-KE</title>
 <meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#FFFAF2">
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="SportsHub-KE">
-<meta property="og:title" content="Command centre | SportsHub-KE">
-<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
-<meta property="og:image" content="/assets/photos/brand-banner.webp">
-<meta name="twitter:card" content="summary_large_image">
+<meta name="application-name" content="SportsHub-KE">
+<meta name="apple-mobile-web-app-title" content="SportsHub-KE">
+<meta name="format-detection" content="telephone=no">
+<meta name="geo.region" content="KE">
+<meta name="geo.placename" content="Nairobi, Kenya">
 <link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
+<link rel="dns-prefetch" href="https://securetoken.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/config.js">
+<link rel="modulepreload" href="/shared/js/core.js">
+<link rel="modulepreload" href="/shared/js/firebase.js">
 <link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="/shared/js/features.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+<script type="speculationrules">{"prerender":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/auth/*","/admin/*","/setup/*","/marketplace/checkout/*","/dashboard/notifications/*","/dashboard/messages/*","/*\\?*page=*"]}},{"not":{"selector_matches":"[data-act], [target], [download], .no-prerender"}}]},"eagerness":"moderate"}],"prefetch":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/admin/*","/setup/*"]}},{"not":{"selector_matches":"[data-act], [target], [download]"}}]},"eagerness":"moderate"}]}</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -38,9 +47,9 @@ import { nowISO, lastMonths, monthLabel, adminPage, adminView } from '/shared/js
 /* ----- Command centre: what needs a decision first, then the state of the platform ----- */
 adminView.overview = async () => {
   const c = (col, where) => db.count(col, where ? { where } : undefined);
-  const [users, teams, coaches, pendingC, facs, activeF, pendingF, vendors, pendingV, products, pendingP, games, tours, members, disputes, openReports, transfers, pendingAds] = await Promise.all([
+  const [users, teams, coaches, pendingC, facs, activeF, pendingF, vendors, pendingV, products, pendingP, games, tours, members, disputes, openReports, transfers, pendingAds, payWait] = await Promise.all([
     c('users'), c('teams'), c('coaches', [['verified', '==', true]]), c('coachApplications', [['status', '==', 'pending']]), c('facilities'), c('facilities', [['participating', '==', true]]), c('facilities', [['status', '==', 'pending']]), c('vendors'), c('vendors', [['status', '==', 'pending']]), c('products'), c('products', [['status', '==', 'pending']]),
-    c('games', [['status', '==', 'open'], ['start', '>=', nowISO()]]), c('tournaments', [['status', '==', 'open']]), c('memberships', [['status', '==', 'active']]), canAdmin('orders') ? c('orders', [['status', '==', 'disputed']]) : 0, c('reports', [['status', '==', 'open']]), c('membershipTransfers', [['status', '==', 'awaiting_approval']]), c('advertisingCampaigns', [['status', '==', 'submitted']])
+    c('games', [['status', '==', 'open'], ['start', '>=', nowISO()]]), c('tournaments', [['status', '==', 'open']]), c('memberships', [['status', '==', 'active']]), canAdmin('orders') ? c('orders', [['status', '==', 'disputed']]) : 0, c('reports', [['status', '==', 'open']]), c('membershipTransfers', [['status', '==', 'awaiting_approval']]), c('advertisingCampaigns', [['status', '==', 'submitted']]), canAdmin('payments') ? c('paymentTransactions', [['status', '==', 'awaiting_verification']]) : 0
   ]);
   const canPay = canAdmin('payments') || canAdmin('settlements') || S.adminRole === 'platform';
   let finance = '';
@@ -50,7 +59,7 @@ adminView.overview = async () => {
     const simulated = pays.filter(p => p.simulated).length;
     const series = lastMonths(6).map(k => { const m = pays.filter(p => (p.completedAt || '').slice(0, 7) === k); return { l: monthLabel(k), v: m.filter(p => ['registration', 'membership'].includes(p.type)).reduce((a, p) => a + p.amount, 0) }; });
     const parts = [['Membership', mem, 'var(--green)'], ['Registration', reg, 'var(--blue)'], ['Advertising', adv, 'var(--yellow)'], ['Commission', comm, 'var(--magenta)']], tot = parts.reduce((a, p) => a + p[1], 0);
-    finance = html`<section><div class="blk-h"><h2>Revenue</h2>${simulated ? html`<span class="tag sim">${simulated} simulated payment${simulated === 1 ? '' : 's'} included</span>` : html`<span class="k">All time</span>`}</div>
+    finance = html`<section><div class="blk-h"><h2>Revenue</h2><span class="row sm">${simulated ? html`<span class="tag sim">${simulated} simulated payment${simulated === 1 ? '' : 's'} included</span>` : html`<span class="k">All time</span>`}<a class="semi small" href="#/admin/revenue">Revenue details ${ic('arrow-right')}</a></span></div>
       <div class="figs mb"><div><b>${money(mem)}</b><span>Membership</span></div><div><b>${money(reg)}</b><span>Registration</span></div><div><b>${money(comm)}</b><span>Marketplace commission</span></div><div><b>${money(adv)}</b><span>Advertising booked</span></div><div><b>${money(settle)}</b><span>Facility settlements</span></div></div>
       <div class="grid g2"><div class="panel"><div class="panel-head"><h3>Membership and registration income</h3><span class="small muted">Six months</span></div>${barChart(series, { c: 'var(--bk)', fmtV: v => v >= 1000 ? `${Math.round(v / 1000)}K` : v })}</div>
         <div class="panel"><div class="panel-head"><h3>Revenue mix</h3></div>${tot ? html`<div class="stackbar" role="img" aria-label="${parts.map(p => `${p[0]}: ${money(p[1])}`).join(', ')}">${parts.filter(p => p[1]).map((p, i) => html`<i style="width:${p[1] / tot * 100}%;background:${p[2]};animation-delay:${i * 90}ms" title="${p[0]}: ${money(p[1])}"></i>`)}</div>
@@ -58,7 +67,7 @@ adminView.overview = async () => {
   }
   const [recent, byCounty] = await Promise.all([canAdmin('audit') ? db.list('auditLogs', { orderBy: ['at', 'desc'], limit: 10 }) : [], db.list('playerProfiles', { limit: 400 })]);
   const cty = {}; byCounty.forEach(p => { if (p.county) cty[p.county] = (cty[p.county] || 0) + 1; });
-  const queue = [['Coach applications', 'Review qualifications and players', pendingC, '/admin/coaches', 'verify'], ['Facilities to verify', 'Check venue details and settlement terms', pendingF, '/admin/facilities', 'facilities'], ['Session transfers to approve', 'Credits held in escrow', transfers, '/admin/transfers', 'transfers'], ['Open reports', 'Reported posts, messages and listings', openReports, '/admin/mod-feed', 'moderation'], ['Campaigns to review', 'Advertising waiting for approval', pendingAds, '/admin/ads', 'ads'], ['Vendors to verify', 'Store applications', pendingV, '/admin/vendors', 'vendors'], ['Products to moderate', 'New marketplace listings', pendingP, '/admin/moderation-products', 'marketplace'], ...(canAdmin('orders') ? [['Order disputes', 'Buyers and sellers waiting on a decision', disputes, '/admin/orders', 'orders']] : [])]
+  const queue = [['M-Pesa payments to confirm', 'Match codes on the statement, then grant access', payWait, '/admin/payments', 'payments'], ['Coach applications', 'Review qualifications and players', pendingC, '/admin/coaches', 'verify'], ['Facilities to verify', 'Check venue details and settlement terms', pendingF, '/admin/facilities', 'facilities'], ['Session transfers to approve', 'Credits held in escrow', transfers, '/admin/transfers', 'transfers'], ['Open reports', 'Reported posts, messages and listings', openReports, '/admin/mod-feed', 'moderation'], ['Campaigns to review', 'Advertising waiting for approval', pendingAds, '/admin/ads', 'ads'], ['Vendors to verify', 'Store applications', pendingV, '/admin/vendors', 'vendors'], ['Products to moderate', 'New marketplace listings', pendingP, '/admin/moderation-products', 'marketplace'], ...(canAdmin('orders') ? [['Order disputes', 'Buyers and sellers waiting on a decision', disputes, '/admin/orders', 'orders']] : [])]
     .filter(q => canAdmin(q[4])).sort((a, b) => b[2] - a[2]);
   const waiting = queue.reduce((a, q) => a + q[2], 0), hour = Number(fmt(new Date(), { hour: 'numeric', hourCycle: 'h23' }));
   return html`${dashHero({ c: 'blue', kick: 'Command centre', title: `${hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'}, ${S.user.name.split(' ')[0]}.`, sub: html`<span>${Rules.ADMIN_ROLES[S.adminRole].label}</span><span>${fmt(new Date(), { weekday: 'long', day: 'numeric', month: 'long' })}</span><span>${waiting ? `${waiting} item${waiting === 1 ? '' : 's'} waiting for a decision` : 'Nothing waiting for a decision'}</span>`, action: canAdmin('reports') ? html`<a class="btn btn-ghost" href="#/admin/reports">${ic('download')} Reports and exports</a>` : '' })}

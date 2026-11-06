@@ -19,6 +19,8 @@ export const FIREBASE_CONFIG = {
 export const FIREBASE_SDK_VERSION = '10.14.1';
 /* The SportsHub Worker (worker/): account creation, every trusted operation and R2 upload signing.
    Cloud Functions are not used. */
+/* The public address of the site. Canonical links, sitemaps and email links use it. */
+export const SITE_URL = 'https://sportshub.co.ke';
 export const WORKER_URL = 'https://sportshub-uploads.manchamdevelopers.workers.dev';
 export const TZ = 'Africa/Nairobi', LOCALE = 'en-KE', CURRENCY = 'KES';
 

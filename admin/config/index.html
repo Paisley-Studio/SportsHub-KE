@@ -5,22 +5,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>System configuration | SportsHub-KE</title>
 <meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#FFFAF2">
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="SportsHub-KE">
-<meta property="og:title" content="System configuration | SportsHub-KE">
-<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
-<meta property="og:image" content="/assets/photos/brand-banner.webp">
-<meta name="twitter:card" content="summary_large_image">
+<meta name="application-name" content="SportsHub-KE">
+<meta name="apple-mobile-web-app-title" content="SportsHub-KE">
+<meta name="format-detection" content="telephone=no">
+<meta name="geo.region" content="KE">
+<meta name="geo.placename" content="Nairobi, Kenya">
 <link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
+<link rel="dns-prefetch" href="https://securetoken.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/config.js">
+<link rel="modulepreload" href="/shared/js/core.js">
+<link rel="modulepreload" href="/shared/js/firebase.js">
 <link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="/shared/js/features.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+<script type="speculationrules">{"prerender":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/auth/*","/admin/*","/setup/*","/marketplace/checkout/*","/dashboard/notifications/*","/dashboard/messages/*","/*\\?*page=*"]}},{"not":{"selector_matches":"[data-act], [target], [download], .no-prerender"}}]},"eagerness":"moderate"}],"prefetch":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/admin/*","/setup/*"]}},{"not":{"selector_matches":"[data-act], [target], [download]"}}]},"eagerness":"moderate"}]}</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -37,7 +46,7 @@ import { pageHead, adminPage, adminView } from '/shared/js/features.js';
 
 adminView.config = async () => {
   const s = (await db.get('systemSettings', 'platform')) || S.settings;
-  return html`${pageHead('System configuration', 'Sensitive settings. Each change records before and after values in the audit log.')}<form class="form" style="max-width:820px" data-form="saveConfig"><div class="form-grid">${fld({ name: 'registrationFee', label: 'Registration fee, KES', type: 'number', min: 0, value: s.registrationFee })}${fld({ name: 'membershipFee', label: 'Monthly membership fee, KES', type: 'number', min: 0, value: s.membershipFee })}${fld({ name: 'sessionsPerPeriod', label: 'Sessions per month', type: 'number', min: 1, value: s.sessionsPerPeriod })}${fld({ name: 'settlementRatePerSession', label: 'Facility settlement per session, KES', type: 'number', min: 0, value: s.settlementRatePerSession })}${fld({ name: 'commissionRate', label: 'Marketplace commission, 0 to 1', type: 'number', min: 0, max: 1, step: '0.01', value: s.commissionRate })}${fld({ name: 'cancelWindowHours', label: 'Free cancellation window, hours', type: 'number', min: 0, value: s.cancelWindowHours })}${fld({ name: 'strikeLimit', label: 'Strikes before restriction', type: 'number', min: 1, value: s.strikeLimit })}${fld({ name: 'restrictDays', label: 'Restriction length, days', type: 'number', min: 0, value: s.restrictDays })}${fld({ name: 'maxTransferCredits', label: 'Max sessions per transfer', type: 'number', min: 0, value: s.maxTransferCredits })}${fld({ name: 'autoApproveProducts', label: 'Publish new products without moderation', type: 'tick', value: s.autoApproveProducts })}</div><button class="btn" type="submit" style="justify-self:start">Save configuration</button></form>`;
+  return html`${pageHead('System configuration', 'Sensitive settings. Each change records before and after values in the audit log.')}<form class="form" style="max-width:820px" data-form="saveConfig"><div class="form-grid">${fld({ name: 'registrationFee', label: 'Registration fee, KES', type: 'number', min: 0, value: s.registrationFee })}${fld({ name: 'membershipFee', label: 'Monthly membership fee, KES', type: 'number', min: 0, value: s.membershipFee })}${fld({ name: 'sessionsPerPeriod', label: 'Sessions per month', type: 'number', min: 1, value: s.sessionsPerPeriod })}${fld({ name: 'settlementRatePerSession', label: 'Facility settlement per session, KES', type: 'number', min: 0, value: s.settlementRatePerSession })}${fld({ name: 'commissionRate', label: 'Marketplace commission, 0 to 1', type: 'number', min: 0, max: 1, step: '0.01', value: s.commissionRate })}${fld({ name: 'mpesaNumber', label: 'M-Pesa number members pay to', type: 'tel', value: s.mpesaNumber || '0720274530', hint: 'Shown in the Lipa na M-Pesa payment window.' })}${fld({ name: 'mpesaName', label: 'Name M-Pesa shows for that number', value: s.mpesaName || '', hint: 'Optional. Helps members check they are paying the right person.' })}${fld({ name: 'cancelWindowHours', label: 'Free cancellation window, hours', type: 'number', min: 0, value: s.cancelWindowHours })}${fld({ name: 'strikeLimit', label: 'Strikes before restriction', type: 'number', min: 1, value: s.strikeLimit })}${fld({ name: 'restrictDays', label: 'Restriction length, days', type: 'number', min: 0, value: s.restrictDays })}${fld({ name: 'maxTransferCredits', label: 'Max sessions per transfer', type: 'number', min: 0, value: s.maxTransferCredits })}${fld({ name: 'autoApproveProducts', label: 'Publish new products without moderation', type: 'tick', value: s.autoApproveProducts })}</div><button class="btn" type="submit" style="justify-self:start">Save configuration</button></form>`;
 };
 F.saveConfig = async v => { await run('updateSettings', v, 'Configuration saved.'); S.settings = { ...S.settings, ...(await db.get('systemSettings', 'platform')) }; };
 route('/admin/config', adminPage('config'), { shell: 'app', auth: true, admin: true, title: "System configuration" });

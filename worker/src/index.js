@@ -4,6 +4,7 @@
    POST /get-upload-url   A presigned R2 PUT address (5 minutes) for a signed-in user.
    GET  /files/<key>      Serves a stored file through the R2 binding (when no public bucket domain is set).
    POST /mpesa-callback   M-Pesa Daraja STK callback, once a provider is installed.
+   Emails: every notification an operation writes is also emailed in the SportsHub theme (email.js, Resend).
    Cron (daily 00:05 EAT) Closes expired membership months and sends renewal reminders.
    Every request that changes data carries the user's Firebase ID token, verified against Google's public keys.
    Firestore is reached through its REST API with a service account (firestore.js). Firebase Storage is never used. */
@@ -11,6 +12,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import TrustedOps from './trusted-ops.js';
 import { runTransaction, db, autoId, emulated } from './firestore.js';
+import { emailNotifications } from './email.js';
 
 /* ----- Responses and errors ----- */
 class ApiError extends Error { constructor(status, code, message) { super(message); this.status = status; this.code = code; } }
@@ -82,10 +84,15 @@ const opEnv = env => ({
   trustedCaller: false,
   relaxAttendance: emulated(env) && env.RELAX_ATTENDANCE === 'true'
 });
-async function runOp(env, op, uid, payload, extra = {}) {
+async function runOp(env, op, uid, payload, extra = {}, ctx = null) {
   const fn = TrustedOps.ops[op];
   if (!fn) throw new ApiError(404, 'not-found', 'Unknown operation.');
-  return runTransaction(env, async tx => fn({ uid, now: new Date().toISOString(), tx, nid: newId, env: { ...opEnv(env), ...extra } }, payload || {}));
+  let last;
+  const result = await runTransaction(env, async tx => { last = tx; return fn({ uid, now: new Date().toISOString(), tx, nid: newId, env: { ...opEnv(env), ...extra } }, payload || {}); });
+  /* Once committed, every notification the operation wrote is also emailed, after the response is sent. */
+  const notes = last ? last.created('notifications') : [];
+  if (notes.length) { const job = emailNotifications(env, notes).catch(e => console.error('Emails failed:', e)); if (ctx) ctx.waitUntil(job); else await job; }
+  return result;
 }
 /* Fixed-window rate limit per user or address. */
 async function rateLimit(env, id) {
@@ -103,17 +110,22 @@ async function rateLimit(env, id) {
 /* Payment providers. A provider starts a payment and later confirms it through a webhook;
    only that webhook, never the browser, can mark a transaction successful. */
 const PROVIDERS = {
-  simulation: { start: async () => ({}) }
+  simulation: { start: async () => ({}) },
+  /* Lipa na M-Pesa Send Money: the member pays the platform number and submits the code (paymentSubmitCode);
+     an administrator confirms it (paymentReview). Nothing to start here. */
+  mpesa_manual: { start: async () => ({}) }
   /* mpesa: { start: async (env, tx) => { call Daraja STK Push, then return { providerCheckoutId } } } */
 };
 
-async function trustedOp(req, env, op, payload) {
+async function trustedOp(req, env, op, payload, ctx) {
   const user = await caller(req, env), uid = user ? user.uid : null;
   if (op === 'bootstrapPlatform') { if (!user) throw new ApiError(401, 'unauthenticated', 'Please sign in first.'); return bootstrap(env, user, payload); }
   if (!uid && !TrustedOps.PUBLIC_OPS.includes(op)) throw new ApiError(401, 'unauthenticated', 'Please sign in first.');
   if (op === 'providerPaymentEvent') throw new ApiError(403, 'permission-denied', 'Not available.');
   await rateLimit(env, uid || `ip:${req.headers.get('CF-Connecting-IP') || 'unknown'}`);
-  const result = await runOp(env, op, uid, payload);
+  /* Emails go to the address on the account; when the form left it blank, use the verified sign-in email. */
+  if (op === 'registerAccount' && user.email && !(payload && payload.email)) payload = { ...(payload || {}), email: user.email };
+  const result = await runOp(env, op, uid, payload, {}, ctx);
   /* Hand off to the configured provider once the pending transaction is safely stored. */
   const providerName = env.PAYMENT_PROVIDER || 'simulation';
   if (result && result.txId && providerName !== 'simulation' && ['paymentInitiate', 'placeOrder'].includes(op)) {
@@ -152,12 +164,14 @@ async function dailySweep(env) {
   }
   const now = new Date().toISOString(), soon = new Date(Date.now() + 3 * 864e5).toISOString();
   const due = await db(env).query('membershipPeriods', { where: [['status', '==', 'active'], ['end', '<=', soon], ['end', '>', now]], limit: 400 });
-  await db(env).commit(t => due.forEach(d => t.set('notifications', autoId(), { uid: d.uid, type: 'membership', title: 'Membership renews soon', body: 'Your month ends in the next three days.', link: '/app/membership', read: false, at: now, channels: ['in_app'] })));
+  const notes = due.map(d => ({ uid: d.uid, type: 'membership', title: 'Membership renews soon', body: 'Your month ends in the next three days. Renew to keep your sessions coming.', link: '/app/membership', read: false, at: now, channels: ['in_app', 'email'] }));
+  await db(env).commit(t => notes.forEach(n => t.set('notifications', autoId(), n)));
+  await emailNotifications(env, notes).catch(e => console.error('Emails failed:', e));
 }
 
 /* M-Pesa Daraja STK callback. Set the MPESA_CALLBACK_TOKEN secret and register .../mpesa-callback?token=VALUE with Safaricom.
    Duplicate deliveries are ignored by providerPaymentEvent, keyed on Daraja's CheckoutRequestID. */
-async function mpesaCallback(req, env) {
+async function mpesaCallback(req, env, ctx) {
   const token = env.MPESA_CALLBACK_TOKEN;
   if (!token || new URL(req.url).searchParams.get('token') !== token) return new Response(null, { status: 404 });
   const body = await req.json().catch(() => null), cb = body && body.Body && body.Body.stkCallback;
@@ -167,7 +181,7 @@ async function mpesaCallback(req, env) {
   const items = (cb.CallbackMetadata && cb.CallbackMetadata.Item) || [];
   const receipt = (items.find(i => i.Name === 'MpesaReceiptNumber') || {}).Value || '';
   const outcome = cb.ResultCode === 0 ? 'success' : cb.ResultCode === 1032 ? 'cancelled' : 'failed';
-  await runOp(env, 'providerPaymentEvent', null, { txId: found[0].id, eventId: cb.CheckoutRequestID, outcome, providerRef: receipt }, { trustedCaller: true });
+  await runOp(env, 'providerPaymentEvent', null, { txId: found[0].id, eventId: cb.CheckoutRequestID, outcome, providerRef: receipt }, { trustedCaller: true }, ctx);
   return Response.json({ ResultCode: 0, ResultDesc: 'Accepted' });
 }
 
@@ -221,18 +235,44 @@ async function serveFile(req, env, key) {
   return new Response(obj.body, { headers: h });
 }
 
+/* ----- Live sitemap: every public record, so Google finds each game, venue, coach, team and product -----
+   Declared in the site's robots.txt. Only public records are listed (the Worker reads past the security rules). */
+async function sitemap(env, ctx, req) {
+  const cache = caches.default, key = new Request(new URL('/sitemap.xml', req.url).href);
+  const hit = await cache.match(key); if (hit) return hit;
+  const site = (env.SITE_URL || 'https://sportshub.co.ke').replace(/\/+$/, ''), now = new Date().toISOString(), d = db(env);
+  const q = (c, where, limit = 500) => d.query(c, { where, limit }).catch(() => []);
+  const [games, facilities, coaches, teams, tournaments, products, stores, athletes] = await Promise.all([
+    q('games', [['status', '==', 'open'], ['start', '>=', now]]), q('facilities', [['status', '==', 'approved']]), q('coaches', [['verified', '==', true]]),
+    q('teams', []), q('tournaments', []), q('products', [['status', '==', 'active']]), q('vendors', [['status', '==', 'approved']]), q('playerProfiles', [['visibility', '==', 'public']])
+  ]);
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const day = r => String(r.updatedAt || r.createdAt || r.submittedAt || now).slice(0, 10);
+  const rows = [
+    ...games.map(r => [`/games/view/?id=${r.id}`, day(r), 'daily', '0.6']), ...facilities.map(r => [`/facilities/view/?id=${r.id}`, day(r), 'weekly', '0.8']),
+    ...coaches.map(r => [`/coaches/view/?id=${r.id}`, day(r), 'weekly', '0.7']), ...teams.map(r => [`/teams/view/?id=${r.id}`, day(r), 'weekly', '0.6']),
+    ...tournaments.filter(r => r.status !== 'draft').map(r => [`/tournaments/view/?id=${r.id}`, day(r), 'daily', '0.7']), ...products.map(r => [`/marketplace/product/?id=${r.id}`, day(r), 'weekly', '0.5']),
+    ...stores.map(r => [`/marketplace/store/?id=${r.id}`, day(r), 'weekly', '0.5']), ...athletes.filter(r => !r.isMinor).map(r => [`/athletes/profile/?id=${r.id}`, day(r), 'weekly', '0.5'])
+  ];
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${rows.map(([p, m, f, pr]) => `  <url><loc>${esc(site + p)}</loc><lastmod>${m}</lastmod><changefreq>${f}</changefreq><priority>${pr}</priority></url>`).join('\n')}\n</urlset>\n`;
+  const res = new Response(xml, { headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600' } });
+  ctx.waitUntil(cache.put(key, res.clone()));
+  return res;
+}
+
 /* ----- Router ----- */
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     const { pathname } = new URL(req.url);
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(req, env) });
     try {
       if (req.method === 'POST') {
-        if (pathname === '/create-account') return json(req, env, await trustedOp(req, env, 'registerAccount', await readBody(req)));
-        if (pathname === '/op') { const { op, payload } = await readBody(req); return json(req, env, await trustedOp(req, env, String(op || ''), payload)); }
+        if (pathname === '/create-account') return json(req, env, await trustedOp(req, env, 'registerAccount', await readBody(req), ctx));
+        if (pathname === '/op') { const { op, payload } = await readBody(req); return json(req, env, await trustedOp(req, env, String(op || ''), payload, ctx)); }
         if (pathname === '/get-upload-url') return json(req, env, await uploadUrl(req, env));
-        if (pathname === '/mpesa-callback') return await mpesaCallback(req, env);
+        if (pathname === '/mpesa-callback') return await mpesaCallback(req, env, ctx);
       }
+      if (req.method === 'GET' && pathname === '/sitemap.xml') return await sitemap(env, ctx, req);
       if (req.method === 'GET' && pathname.startsWith('/files/')) {
         const key = decodeURIComponent(pathname.slice(7));
         if (!/^(uploads|chat)\/[A-Za-z0-9_-]{3,128}\/[A-Za-z0-9_.-]{4,100}$/.test(key)) return new Response('Not found', { status: 404 });

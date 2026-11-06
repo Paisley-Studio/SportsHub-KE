@@ -69,35 +69,73 @@ A.contactPlayer = async d => {
   const v = await promptForm({ title: 'Send a contact request', intro: 'Phone numbers are never shared. If they accept, you can message them here. Requests about players under 18 go through their guardian.', fields: fld({ name: 'message', label: 'Introduce yourself', type: 'textarea', required: true, full: true }), submit: 'Send request' });
   if (v) await run('contactRequest', { toUid: d.uid, message: v.message }, 'Contact request sent.').catch(() => {});
 };
-/* ----- Payment experience: initiation, confirmation, outcome, receipt ----- */
+/* ----- Payment experience: initiation, confirmation, outcome, receipt -----
+   Lipa na M-Pesa (provider mpesa_manual): the member sends money to the platform number, enters the 10-character
+   M-Pesa code, and an administrator confirms it. The window follows the transaction live, so it updates on approval. */
 export const paymentFlow = ({ txId, amount, description }) => new Promise(resolve => {
   S.ui.pay = { txId, amount, description, resolve, step: 'loading' };
   let stop = () => {};
-  openModal({ title: 'Checkout', body: html`<div id="pay-body"></div>` }).then(() => { stop(); const r = S.ui.pay && S.ui.pay.resolve; if (S.ui.pay && !S.ui.pay.done) { S.ui.pay.done = true; if (r) r('dismissed'); } });
+  openModal({ title: 'Checkout', body: html`<div id="pay-body"></div>` }).then(() => { stop(); const r = S.ui.pay && S.ui.pay.resolve; if (S.ui.pay && !S.ui.pay.done) { S.ui.pay.done = true; if (r) r(S.ui.pay.outcome || 'dismissed'); } });
   drawPay();
-  /* The server decides whether a transaction is simulated. A real payment is confirmed only by the provider's webhook, so we listen for it. */
+  /* Only the server changes a payment's status, so the window listens to it. */
   stop = db.watchDoc('paymentTransactions', txId, t => {
     const p = S.ui.pay; if (!t || !p || p.txId !== txId) return;
-    p.simulated = !!t.simulated;
-    if (p.step === 'loading') { p.step = 'confirm'; drawPay(); }
-    if (t.status !== 'pending' && p.step !== 'done') { p.step = 'done'; p.outcome = t.status; drawPay(t); refreshSession().catch(() => {}); }
+    p.simulated = !!t.simulated; p.manual = t.provider === 'mpesa_manual';
+    if (t.status === 'pending') { if (p.step === 'loading') { p.step = 'confirm'; drawPay(); } return; }
+    if (t.status === 'awaiting_verification') { if (p.step !== 'submitted') { p.step = 'submitted'; p.outcome = 'submitted'; drawPay(t); } return; }
+    if (p.step !== 'done') { p.step = 'done'; p.outcome = t.status; drawPay(t); refreshSession().catch(() => {}); }
   });
 });
+const mpesaNo = () => String(S.settings.mpesaNumber || '0720274530');
+const prettyNo = n => n.replace(/^(\d{4})(\d{3})(\d{3})$/, '$1 $2 $3');
 export const drawPay = (t) => {
   const p = S.ui.pay, box = $('#pay-body'); if (!box) return;
   if (p.step === 'loading') { box.innerHTML = html`<div class="row" style="padding:24px 0"><span class="spin"></span><span>Preparing your payment...</span></div>`.s; return; }
   const sim = html`<div class="notice c-yellow small"><b>Simulation.</b> This is not an M-Pesa transaction and no money moves. Choose the outcome to see how the platform responds.</div>`;
-  if (p.step === 'confirm') box.innerHTML = html`<div class="stack">${p.simulated ? sim : ''}<dl class="kv"><dt>Item</dt><dd>${p.description}</dd><dt>Amount</dt><dd>${money(p.amount)}</dd></dl>
+  if (p.step === 'confirm' && p.manual) {
+    const no = mpesaNo();
+    box.innerHTML = html`<div class="mpesa stack">
+      <div class="mp-head"><span class="mp-brand">Lipa na <b>M-PESA</b></span><span class="mp-amt"><span>Amount</span><b>${money(p.amount)}</b></span></div>
+      <p class="small muted">${p.description}</p>
+      <ol class="mp-steps">
+        <li>Open <b>M-PESA</b> on your phone and choose <b>Send Money</b>.</li>
+        <li>Enter the number <span class="mp-no"><b>${prettyNo(no)}</b><button type="button" class="icon-btn" data-act="copyText" data-v="${no}" aria-label="Copy the number">${ic('copy')}</button></span>${S.settings.mpesaName ? html` <span class="xs muted">(${S.settings.mpesaName})</span>` : ''}</li>
+        <li>Send exactly <b>${money(p.amount)}</b> and enter your M-PESA PIN.</li>
+        <li>Type the <b>10-character code</b> from the M-PESA confirmation SMS below, then press <b>Confirm payment</b>.</li>
+      </ol>
+      <form class="form" data-form="payCode" novalidate>
+        <div class="field"><label for="mp-code">M-PESA transaction code <span class="req">*</span></label><input id="mp-code" class="mp-code" name="code" required maxlength="10" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="e.g. SGH7K2L9QX"><span class="hint">It starts the SMS, for example <b>SGH7K2L9QX Confirmed.</b></span></div>
+        <div class="field"><label for="mp-phone">Phone number you paid from</label><input id="mp-phone" name="phone" type="tel" autocomplete="tel" placeholder="07XX XXX XXX"></div>
+        <p class="form-err err hide"></p>
+        <button class="btn btn-green btn-block" type="submit">${ic('check')} Confirm payment</button>
+      </form>
+      <p class="xs faint">We check every code against our M-PESA statement before access is granted. You get a notification and an email as soon as it is confirmed.</p></div>`.s;
+    const inp = $('#mp-code', box); if (inp) { inp.addEventListener('input', () => { inp.value = inp.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10); }); setTimeout(() => inp.focus(), 50); }
+  } else if (p.step === 'confirm') box.innerHTML = html`<div class="stack">${p.simulated ? sim : ''}<dl class="kv"><dt>Item</dt><dd>${p.description}</dd><dt>Amount</dt><dd>${money(p.amount)}</dd></dl>
     ${p.simulated ? html`<div class="stack sm"><button class="btn btn-green btn-block" data-act="payOutcome" data-v="success">Simulate successful payment</button><button class="btn btn-ghost btn-block" data-act="payOutcome" data-v="failed">Simulate failed payment</button><button class="btn btn-ghost btn-block" data-act="payOutcome" data-v="cancelled">Simulate cancelled payment</button></div>` : html`<p class="muted small">A payment prompt has been sent by your configured provider. This window updates when the provider confirms the result.</p><div class="spin"></div>`}</div>`.s;
   else if (p.step === 'working') box.innerHTML = html`<div class="row" style="padding:24px 0"><span class="spin"></span><span>Waiting for confirmation from the payment service...</span></div>`.s;
-  else {
-    const ok = t.status === 'success';
-    box.innerHTML = html`<div class="stack"><div class="row sm">${ic(ok ? 'circle-check' : 'circle-x')}<h3>${ok ? 'Payment successful' : t.status === 'failed' ? 'Payment failed' : 'Payment cancelled'}</h3>${t.simulated ? html`<span class="tag sim">Simulated</span>` : ''}</div>
-      ${ok ? receiptHtml(t) : html`<p class="muted small">You were not charged. You can try again whenever you are ready.</p>`}
+  else if (p.step === 'submitted') {
+    box.innerHTML = html`<div class="stack pay-state c-blue"><span class="ps-ic">${ic('hourglass')}</span><h3>Payment submitted</h3>
+      <p class="muted small">Thank you. We are confirming M-PESA code <b>${t.mpesaCode}</b> for ${money(t.amount)}. Access opens as soon as it is confirmed, and we will notify you and send an email. You can close this window.</p>
+      <dl class="kv"><dt>For</dt><dd>${t.description}</dd><dt>Reference</dt><dd>${t.ref}</dd><dt>Status</dt><dd>${badge('awaiting_verification')}</dd></dl>
+      <div class="row"><a class="btn btn-ghost" href="#/app/payments">Payment records</a><button class="btn" data-act="payDone">Done</button></div></div>`.s;
+  } else {
+    const ok = t.status === 'success', label = ok ? 'Payment confirmed' : t.status === 'rejected' ? 'Payment not confirmed' : t.status === 'failed' ? 'Payment failed' : 'Payment cancelled';
+    box.innerHTML = html`<div class="stack pay-state ${ok ? 'c-green' : 'c-magenta'}"><span class="ps-ic">${ic(ok ? 'circle-check' : 'circle-x')}</span><h3>${label}</h3>${t.simulated ? html`<span class="tag sim">Simulated</span>` : ''}
+      ${ok ? receiptHtml(t) : html`<p class="muted small">${t.status === 'rejected' ? `${t.rejectReason || 'We could not match the M-PESA code.'} If you paid, start again and enter the exact code from your SMS.` : 'You were not charged. You can try again whenever you are ready.'}</p>`}
       <div class="row">${ok ? html`<button class="btn btn-ghost" data-act="printReceipt">${ic('printer')} Print receipt</button>` : ''}<button class="btn" data-act="payDone">Done</button></div></div>`.s;
   }
 };
-export const receiptHtml = t => html`<dl class="kv"><dt>Receipt</dt><dd>${t.receiptNo}</dd><dt>Reference</dt><dd>${t.ref}</dd><dt>For</dt><dd>${t.description}</dd><dt>Amount</dt><dd>${money(t.amount)}</dd><dt>Date</dt><dd>${fmtDT(t.completedAt || t.initiatedAt)}</dd><dt>Member</dt><dd>${t.memberId || ''}</dd></dl>`;
+F.payCode = async v => {
+  const code = String(v.code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!/^[A-Z0-9]{10}$/.test(code) || !/[A-Z]/.test(code) || !/\d/.test(code)) throw new Error('Enter the 10-character M-PESA code from your SMS, for example SGH7K2L9QX.');
+  const p = S.ui.pay;
+  await callOp('paymentSubmitCode', { txId: p.txId, code, phone: v.phone });
+  const t = await db.get('paymentTransactions', p.txId);
+  if (t && p.step !== 'submitted' && p.step !== 'done') { p.step = 'submitted'; p.outcome = 'submitted'; drawPay(t); }
+};
+A.copyText = async d => { try { await navigator.clipboard.writeText(d.v); toast('Number copied.', 'green'); } catch (e) { toast(d.v); } };
+export const receiptHtml = t => html`<dl class="kv"><dt>Receipt</dt><dd>${t.receiptNo}</dd><dt>Reference</dt><dd>${t.ref}</dd><dt>For</dt><dd>${t.description}</dd><dt>Amount</dt><dd>${money(t.amount)}</dd><dt>Date</dt><dd>${fmtDT(t.completedAt || t.initiatedAt)}</dd><dt>Member</dt><dd>${t.memberId || ''}</dd>${t.mpesaCode ? html`<dt>M-PESA code</dt><dd>${t.mpesaCode}</dd>` : ''}</dl>`;
 A.payOutcome = async d => {
   const p = S.ui.pay; p.step = 'working'; drawPay();
   await new Promise(r => setTimeout(r, 650));
@@ -132,6 +170,7 @@ A.googleSignIn = async d => {
    accounts are created on the server (setup and Roles), never registered here and never through Google. */
 gates.admin = async () => {
   const other = S.uid && S.user ? S.user.email || S.user.name : '';
+  S.pageTitle = 'Administrator sign in';
   return authShell('admin', 'SportsHub-KE administration', html`<div class="auth-card">
     <div class="stack"><span class="eyebrow rv f">Administration</span><h1><span class="lnr"><span>Administrator sign in.</span></span></h1><p class="muted rv u" style="--d:.15s">For SportsHub-KE staff. Sign in with the email and password your administrator account was given.</p></div>
     ${other ? html`<p class="notice small rv u" style="--d:.2s">You are signed in as ${other}, which does not have administrator access. Sign in below with an administrator account.</p>` : ''}
@@ -355,7 +394,8 @@ export const membershipCard = (pop) => {
 /* ----- Membership ----- */
 A.payFee = async d => {
   const r = await PaymentService.start(d.type);
-  await paymentFlow({ txId: r.txId, amount: r.amount, description: r.description });
+  const outcome = await paymentFlow({ txId: r.txId, amount: r.amount, description: r.description });
+  if (outcome === 'submitted') toast('Payment submitted. We will confirm it and let you know.', 'blue');
   await refreshSession(); renderMain();
 };
 A.cancelBooking = async d => { if (await confirmBox('Cancel this booking?', 'The slot is released. Covered sessions return your reserved credit.', 'Cancel booking', 'btn-bad')) await run('cancelBooking', { id: d.id }, 'Booking cancelled.').catch(() => {}); };

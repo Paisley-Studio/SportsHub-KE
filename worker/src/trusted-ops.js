@@ -78,7 +78,8 @@ const TrustedOps = (() => {
   /* ----- Shared context helpers ----- */
   const DEFAULT_SETTINGS = {
     registrationFee: 500, membershipFee: 1500, sessionsPerPeriod: 8, currency: 'KES', timeZone: 'Africa/Nairobi', country: 'Kenya',
-    commissionRate: 0.1, settlementRatePerSession: 120, cancelWindowHours: 6, strikeLimit: 3, restrictDays: 7, maxTransferCredits: 4, autoApproveProducts: false
+    commissionRate: 0.1, settlementRatePerSession: 120, cancelWindowHours: 6, strikeLimit: 3, restrictDays: 7, maxTransferCredits: 4, autoApproveProducts: false,
+    mpesaNumber: '0720274530', mpesaName: ''
   };
   const settings = async c => Object.assign({}, DEFAULT_SETTINGS, (await c.tx.get('systemSettings', 'platform')) || {});
   const me = async c => {
@@ -95,7 +96,12 @@ const TrustedOps = (() => {
     return { user: u, role };
   };
   const audit = (c, action, target, meta = {}) => c.tx.set('auditLogs', c.nid('log'), { actorId: c.uid || 'system', action, target: target || '', meta, at: c.now });
-  const notify = (c, uid, type, title, body, link) => { if (uid) c.tx.set('notifications', c.nid('ntf'), { uid, type, title, body: body || '', link: link || '', read: false, at: c.now, channels: ['in_app'] }); };
+  const notify = (c, uid, type, title, body, link) => { if (uid) c.tx.set('notifications', c.nid('ntf'), { uid, type, title, body: body || '', link: link || '', read: false, at: c.now, channels: ['in_app', 'email'] }); };
+  /* Tells every administrator whose role holds this permission (in app, and by email through the Worker). */
+  const notifyAdmins = async (c, perm, type, title, body, link) => {
+    const admins = await c.tx.query('adminRoles', { limit: 60 });
+    admins.filter(a => can(a.role, perm)).forEach(a => notify(c, a.uid || a.id, type, title, body, link));
+  };
   const withRole = (u, role) => (u.roles || []).includes(role) ? u.roles : [...(u.roles || []), role];
   const nextMemberId = async c => {
     const cnt = (await c.tx.get('systemSettings', 'counters')) || { member: 1000 };
@@ -219,8 +225,9 @@ const TrustedOps = (() => {
     need(t, 'not-found', 'Payment not found.');
     const evId = `${txId}_${eventId}`;
     if (await c.tx.get('paymentEvents', evId)) return { duplicate: true, status: t.status, txId, reason: 'event-already-processed' };
-    c.tx.set('paymentEvents', evId, { txId, eventId, outcome, at: c.now, ignored: t.status !== 'pending' });
-    if (t.status !== 'pending') return { duplicate: true, status: t.status, txId, reason: 'transaction-already-final' };
+    const open = t.status === 'pending' || t.status === 'awaiting_verification';
+    c.tx.set('paymentEvents', evId, { txId, eventId, outcome, at: c.now, ignored: !open });
+    if (!open) return { duplicate: true, status: t.status, txId, reason: 'transaction-already-final' };
     if (outcome === 'failed' || outcome === 'cancelled') {
       c.tx.update('paymentTransactions', txId, { status: outcome, completedAt: c.now, providerRef: providerRef || '' });
       notify(c, t.uid, 'payment', outcome === 'failed' ? 'Payment failed' : 'Payment cancelled', `${t.description} was not completed. You were not charged.`, '/app/payments');
@@ -402,6 +409,41 @@ const TrustedOps = (() => {
       const t = await c.tx.get('paymentTransactions', str(p.txId, 'Payment'));
       need(t && t.uid === c.uid && t.simulated, 'permission-denied', 'This is not your simulated payment.');
       return applyPaymentEvent(c, { txId: t.id, eventId: str(p.eventId, 'Event'), outcome: oneOf(p.outcome, ['success', 'failed', 'cancelled'], 'Outcome'), providerRef: 'SIMULATED' });
+    },
+    /* Lipa na M-Pesa (Send Money). The member pays the platform number, then gives the M-Pesa confirmation code here.
+       Nothing is granted until a finance administrator matches the code against the M-Pesa statement (paymentReview). */
+    async paymentSubmitCode(c, p) {
+      const u = await me(c), t = await c.tx.get('paymentTransactions', str(p.txId, 'Payment'));
+      need(t && t.uid === c.uid, 'permission-denied', 'This is not your payment.');
+      need(t.status === 'pending', 'failed-precondition', t.status === 'awaiting_verification' ? 'This payment is already waiting for confirmation.' : 'This payment is already closed.');
+      const code = clean(p.code).toUpperCase().replace(/\s+/g, '');
+      need(/^[A-Z0-9]{10}$/.test(code) && /[A-Z]/.test(code) && /[0-9]/.test(code), 'invalid-argument', 'Enter the 10-character M-Pesa code from your confirmation SMS, for example SGH7K2L9QX.');
+      need(!(await c.tx.get('mpesaCodes', code)), 'already-exists', 'That M-Pesa code has already been submitted.');
+      c.tx.set('mpesaCodes', code, { code, txId: t.id, uid: c.uid, at: c.now });
+      c.tx.update('paymentTransactions', t.id, { status: 'awaiting_verification', mpesaCode: code, payerPhone: str(p.phone, 'Phone', 30, false), submittedAt: c.now });
+      notify(c, c.uid, 'payment', 'Payment received for confirmation', `We received M-Pesa code ${code} for ${t.description} (KES ${t.amount}). You will be notified as soon as it is confirmed.`, '/app/payments');
+      await notifyAdmins(c, 'payments', 'payment', 'M-Pesa payment to confirm', `${u.name} (${u.memberId || 'member'}) sent KES ${t.amount} for ${t.description}. Code ${code}.`, '/admin/payments');
+      audit(c, 'payment.submitted', t.id, { code, amount: t.amount });
+      return { status: 'awaiting_verification', txId: t.id };
+    },
+    async paymentReview(c, p) {
+      await requirePerm(c, 'payments');
+      const t = await c.tx.get('paymentTransactions', str(p.txId, 'Payment')), decision = oneOf(p.decision, ['approve', 'reject'], 'Decision');
+      need(t, 'not-found', 'Payment not found.');
+      need(t.status === 'awaiting_verification', 'failed-precondition', 'This payment is not waiting for confirmation.');
+      if (decision === 'approve') {
+        const r = await applyPaymentEvent(c, { txId: t.id, eventId: `review_${t.mpesaCode}`, outcome: 'success', providerRef: t.mpesaCode });
+        c.tx.update('paymentTransactions', t.id, { reviewedBy: c.uid, reviewedAt: c.now });
+        audit(c, 'payment.approved', t.id, { code: t.mpesaCode, amount: t.amount });
+        return r;
+      }
+      const reason = text(p.reason, 'Reason', 300) || 'The M-Pesa code could not be matched to a payment.';
+      c.tx.update('paymentTransactions', t.id, { status: 'rejected', completedAt: c.now, reviewedBy: c.uid, reviewedAt: c.now, rejectReason: reason });
+      if (t.mpesaCode) c.tx.del('mpesaCodes', t.mpesaCode); /* A genuine code that was rejected by mistake can be sent again. */
+      for (const orderId of t.orderIds || []) await cancelOrderInternal(c, orderId, 'Payment not confirmed');
+      notify(c, t.uid, 'payment', 'Payment not confirmed', `${t.description}: ${reason} If you did pay, start the payment again and enter the exact code from your M-Pesa SMS.`, '/app/payments');
+      audit(c, 'payment.rejected', t.id, { code: t.mpesaCode, reason });
+      return { status: 'rejected' };
     },
     async providerPaymentEvent(c, p) {
       need(c.env.trustedCaller === true, 'permission-denied', 'Only the payment webhook can report this.');
@@ -746,6 +788,8 @@ const TrustedOps = (() => {
       }
       c.tx.update('facilities', id, { priceFrom: minRate });
       c.tx.update('users', c.uid, { roles: withRole(u, 'facility_applicant') });
+      notify(c, c.uid, 'verification', 'Facility application received', 'Our team will check your venue details and let you know when it is approved.', '/app/facility');
+      await notifyAdmins(c, 'facilities', 'verification', 'New facility to verify', `${u.name} submitted a facility for approval.`, '/admin/facilities');
       audit(c, 'facility.submit', id);
       return { id };
     },
@@ -1329,6 +1373,8 @@ const TrustedOps = (() => {
       need(sports.length, 'invalid-argument', 'Choose at least one sport specialisation.');
       c.tx.set('coachApplications', c.uid, { id: c.uid, uid: c.uid, name: str(p.name || u.name, 'Name', 80), phone: str(p.phone, 'Phone', 30), email: str(p.email, 'Email', 120, false), county: str(p.county, 'County', 60), area: str(p.area, 'Operating area', 80, false), sports, experienceYears: num(p.experienceYears ?? 0, 'Experience', 0, 70), experience: text(p.experience, 'Experience', 1000), qualifications: text(p.qualifications, 'Qualifications', 800), certificates: arr(p.certificates, 10), academy: str(p.academy, 'Affiliation', 100, false), documents: arr(p.documents, 10).map(media).filter(Boolean), players, status: 'pending', submittedAt: c.now });
       c.tx.update('users', c.uid, { roles: withRole(u, 'coach_applicant') });
+      notify(c, c.uid, 'verification', 'Coach application received', 'Our team will review your qualifications and let you know the outcome.', '/app/coach');
+      await notifyAdmins(c, 'verify', 'verification', 'New coach application', `${u.name} applied to coach.`, '/admin/coaches');
       audit(c, 'coach.apply', c.uid, { players: players.length });
       return { status: 'pending' };
     },
@@ -1421,6 +1467,8 @@ const TrustedOps = (() => {
       const id = `${kind}_${c.uid}`, ex = await c.tx.get('verificationRequests', id);
       need(!ex || ['rejected', 'info_required'].includes(ex.status), 'already-exists', 'You already have an application on file.');
       c.tx.set('verificationRequests', id, { id, uid: c.uid, name: u.name, kind, orgName: str(p.orgName, 'Organisation name', 100), county: str(p.county, 'County', 60), contactPhone: str(p.contactPhone, 'Phone', 30), description: text(p.description, 'Description', 1000), credentials: text(p.credentials, 'Credentials', 800), status: 'pending', submittedAt: c.now });
+      notify(c, c.uid, 'verification', 'Application received', 'We will review your application and let you know the outcome.', '/app/settings');
+      await notifyAdmins(c, 'verify', 'verification', 'New verification request', `${u.name} submitted a verification request.`, '/admin/verify');
       audit(c, 'verification.submit', id);
       return { id };
     },
@@ -1456,6 +1504,8 @@ const TrustedOps = (() => {
       need(!ex || ['rejected', 'info_required'].includes(ex.status), 'already-exists', 'You already have a vendor application on file.');
       c.tx.set('vendors', c.uid, { id: c.uid, ownerId: c.uid, ownerName: u.name, businessName: str(p.businessName, 'Business name', 100), description: text(p.description, 'Description', 1000, true), county: str(p.county, 'County', 60), town: str(p.town, 'Town', 80), contactPhone: str(p.contactPhone, 'Phone', 30), kraPin: str(p.kraPin, 'KRA PIN', 20, false), logo: media(p.logo), status: 'pending', submittedAt: c.now });
       c.tx.update('users', c.uid, { roles: withRole(u, 'vendor_applicant') });
+      notify(c, c.uid, 'verification', 'Store application received', 'We will review your store details and let you know the outcome.', '/app/store');
+      await notifyAdmins(c, 'vendors', 'verification', 'New store application', `${u.name} applied to open a store.`, '/admin/vendors');
       audit(c, 'vendor.submit', c.uid);
       return { status: 'pending' };
     },
@@ -1858,6 +1908,8 @@ const TrustedOps = (() => {
       [['registrationFee', 0, 1e6], ['membershipFee', 0, 1e6], ['sessionsPerPeriod', 1, 60], ['settlementRatePerSession', 0, 1e6], ['cancelWindowHours', 0, 72], ['strikeLimit', 1, 20], ['restrictDays', 0, 90], ['maxTransferCredits', 0, 60]].forEach(([k, a, b]) => { if (p[k] !== undefined && p[k] !== '') patch[k] = num(p[k], k, a, b); });
       if (p.commissionRate !== undefined && p.commissionRate !== '') patch.commissionRate = num(p.commissionRate, 'Commission rate', 0, 1);
       if (p.autoApproveProducts !== undefined) patch.autoApproveProducts = !!p.autoApproveProducts;
+      if (p.mpesaNumber !== undefined) { const n = clean(p.mpesaNumber).replace(/\s+/g, ''); need(/^(\+?254|0)?[17]\d{8}$/.test(n), 'invalid-argument', 'Enter a valid Safaricom number for M-Pesa payments.'); patch.mpesaNumber = n; }
+      if (p.mpesaName !== undefined) patch.mpesaName = str(p.mpesaName, 'M-Pesa account name', 60, false);
       c.tx.set('systemSettings', 'platform', { ...cur, ...patch });
       audit(c, 'settings.update', 'platform', { before: Object.fromEntries(Object.keys(patch).map(k => [k, cur[k]])), after: patch });
       return { ok: true };

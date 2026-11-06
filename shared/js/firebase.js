@@ -20,28 +20,69 @@ const toQuery = (c, q = {}) => {
 const rows = snap => snap.docs.map(d => ({ id: d.id, ...d.data() }));
 const friendly = e => (e && e.code === 'permission-denied' ? new Error('You do not have access to that.') : e);
 
+/* ----- Instant pages: a stale-while-revalidate read cache -----
+   While a page first loads, reads are answered from what this device saw last time, so the page draws at once.
+   Every answer used is then fetched live in the background; if anything changed, the page redraws (ui.js).
+   Entries are per signed-in user, are cleared by any write or sign-out, and never hold more than about 250 KB each. */
+const CK = 'shke.c2.';
+const who = () => (fbAuth && fbAuth.currentUser ? fbAuth.currentUser.uid : 'anon');
+let instant = false;
+const usedFromCache = [];
+const cRead = k => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : undefined; } catch (e) { return undefined; } };
+const cWrite = (k, v) => {
+  try { const str = JSON.stringify(v); if (str.length < 250000) localStorage.setItem(k, str); }
+  catch (e) { cacheClear(true); /* Storage full: start again. */ }
+};
+export const cacheClear = (everyone = false) => {
+  try { const mine = `${CK}${who()}|`; Object.keys(localStorage).filter(k => k.startsWith(CK) && (everyone || k.startsWith(mine) || k.startsWith(`${CK}anon|`))).forEach(k => localStorage.removeItem(k)); } catch (e) { /* no storage */ }
+};
+export const instantPages = {
+  start() { instant = true; usedFromCache.length = 0; },
+  /* Ends the instant window and returns the cached answers that were used. */
+  stop() { instant = false; return usedFromCache.splice(0); },
+  /* Fetches those answers live, stores them, and resolves true if any differ from what was shown. */
+  async changed(list) {
+    let diff = false;
+    await Promise.all(list.map(async ({ k, live, old }) => {
+      try { const fresh = await live(); cWrite(k, fresh); if (JSON.stringify(fresh) !== JSON.stringify(old)) diff = true; } catch (e) { /* keep what is shown */ }
+    }));
+    return diff;
+  }
+};
+/* Queries such as "games starting from now" carry the current time; for the cache key, any time within
+   a few hours of now counts as "now", so the page still opens instantly (the live check corrects it). */
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
+const keyOf = args => JSON.stringify(args === undefined ? null : args, (k, v) => (typeof v === 'string' && ISO.test(v) && Math.abs(Date.parse(v) - Date.now()) < 6 * 3600e3 ? '@now' : v));
+const cached = async (kind, c, args, live) => {
+  const k = `${CK}${who()}|${kind}|${c}|${keyOf(args)}`;
+  if (instant) { const hit = cRead(k); if (hit !== undefined) { usedFromCache.push({ k, live, old: hit }); return hit; } }
+  const v = await live(); cWrite(k, v); return v;
+};
+const liveGet = async (c, i) => { const d = await F.getDoc(F.doc(fs, c, i)); return d.exists() ? { id: d.id, ...d.data() } : null; };
+const writeDone = () => cacheClear();
+
 export const db = {
   async get(c, i) {
-    try { const d = await F.getDoc(F.doc(fs, c, i)); return d.exists() ? { id: d.id, ...d.data() } : null; }
+    try { return await cached('get', c, i, () => liveGet(c, i)); }
     catch (e) { if (e.code === 'permission-denied') return null; throw e; }
   },
   /* A query the user may not read, or one whose index is missing or still building (failed-precondition),
      returns no rows instead of failing the whole page. The console keeps the index link for the administrator. */
   async list(c, q) {
-    try { return rows(await F.getDocs(toQuery(c, q))); }
+    try { return await cached('list', c, q, async () => rows(await F.getDocs(toQuery(c, q)))); }
     catch (e) {
       if (e.code === 'failed-precondition') { console.error(`Query on ${c} needs a Firestore index (it may still be building):`, e.message); return []; }
       console.warn(`Query on ${c} failed:`, e.message); if (e.code === 'permission-denied') return []; throw friendly(e);
     }
   },
   async count(c, q) {
-    try { return (await F.getCountFromServer(toQuery(c, { where: q && q.where }))).data().count; }
+    try { return await cached('count', c, q && q.where, async () => (await F.getCountFromServer(toQuery(c, { where: q && q.where }))).data().count); }
     catch (e) { console.warn(`Count on ${c} failed:`, e.message); return 0; }
   },
-  async add(c, d) { try { return (await F.addDoc(F.collection(fs, c), d)).id; } catch (e) { throw friendly(e); } },
-  async set(c, i, d) { try { await F.setDoc(F.doc(fs, c, i), d); } catch (e) { throw friendly(e); } },
-  async update(c, i, p) { try { await F.setDoc(F.doc(fs, c, i), p, { merge: true }); } catch (e) { throw friendly(e); } },
-  async remove(c, i) { try { await F.deleteDoc(F.doc(fs, c, i)); } catch (e) { throw friendly(e); } },
+  async add(c, d) { try { const id = (await F.addDoc(F.collection(fs, c), d)).id; writeDone(); return id; } catch (e) { throw friendly(e); } },
+  async set(c, i, d) { try { await F.setDoc(F.doc(fs, c, i), d); writeDone(); } catch (e) { throw friendly(e); } },
+  async update(c, i, p) { try { await F.setDoc(F.doc(fs, c, i), p, { merge: true }); writeDone(); } catch (e) { throw friendly(e); } },
+  async remove(c, i) { try { await F.deleteDoc(F.doc(fs, c, i)); writeDone(); } catch (e) { throw friendly(e); } },
   watch(c, q, cb) { return F.onSnapshot(toQuery(c, q), s => cb(rows(s)), e => { console.warn(`Listener on ${c} failed:`, e.message); cb([]); }); },
   watchDoc(c, i, cb) { return F.onSnapshot(F.doc(fs, c, i), d => cb(d.exists() ? { id: d.id, ...d.data() } : null), e => { console.warn(`Listener on ${c}/${i} failed:`, e.message); cb(null); }); }
 };
@@ -65,7 +106,7 @@ export const auth = {
       throw e;
     }
   },
-  async signOut() { await authApi.signOut(fbAuth); },
+  async signOut() { cacheClear(); await authApi.signOut(fbAuth); },
   async reset(email) { await authApi.sendPasswordResetEmail(fbAuth, email); }
 };
 const emulatorsUp = async () => {
@@ -111,6 +152,7 @@ async function api(path, body, fallback = 'Something went wrong.') {
   if (!res) throw new Error('Could not reach the SportsHub server. Check your connection and try again.');
   const out = await res.json().catch(() => null);
   if (!res.ok) { const err = new Error((out && out.error && out.error.message) || fallback); err.code = out && out.error && out.error.code; throw err; }
+  if (path !== '/get-upload-url') cacheClear(); /* Something changed on the server: the next page reads live data. */
   return out;
 }
 /* Trusted operations run on the Worker. Account creation has its own endpoint; everything else goes through /op. */

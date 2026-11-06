@@ -123,6 +123,8 @@ function makeTx(env, transaction) {
     del(c, i) { const k = key(c, i); sets.delete(k); patches.delete(k); merges.delete(k); dels.add(k); },
     /* Like set(..., { merge: true }): writes these fields, keeps the rest, creates the document if needed. Write-only. */
     merge(c, i, d) { const k = key(c, i); merges.set(k, { ...(merges.get(k) || {}), ...d }); },
+    /* Documents this transaction creates in a collection (used to email new notifications after commit). */
+    created(c) { return [...sets].filter(([k]) => k.startsWith(`${c}/`)).map(([k, d]) => ({ id: k.split('/').pop(), ...d })); },
     writes() {
       const w = [];
       sets.forEach((d, k) => w.push({ update: { name: name(k), fields: encFields(d) } }));
@@ -161,6 +163,15 @@ export const db = env => {
   const tx = makeTx(env, null);
   return {
     get: tx.get, query: tx.query,
+    /* Many documents in one request: pairs of [collection, id]. Resolves to a Map of 'collection/id' to data. */
+    async getMany(pairs) {
+      const out = new Map();
+      for (let i = 0; i < pairs.length; i += 300) {
+        const rows = await call(env, 'POST', `${root(env)}:batchGet`, { documents: pairs.slice(i, i + 300).map(([c, id]) => `${root(env)}/${c}/${id}`) });
+        (rows || []).forEach(r => { if (r.found) { const parts = r.found.name.split('/'); out.set(`${parts[parts.length - 2]}/${parts[parts.length - 1]}`, fromDoc(r.found)); } });
+      }
+      return out;
+    },
     async commit(build) { const t = makeTx(env, null); build(t); const writes = t.writes(); if (writes.length) await call(env, 'POST', `${root(env)}:commit`, { writes }); }
   };
 };

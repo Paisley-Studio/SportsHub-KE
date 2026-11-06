@@ -31,6 +31,7 @@ Vanilla multi-page JavaScript site (ES modules, no framework, no build step) on 
   - `POST /get-upload-url`: presigned R2 PUT.
   - `GET /files/<key>`: serves a stored file.
   - `POST /mpesa-callback`: M-Pesa callback.
+  - `GET /sitemap.xml`: live sitemap of every public record (declared in `robots.txt`).
   - Cron `5 21 * * *` (00:05 Nairobi): daily membership sweep.
 - Every request carries `Authorization: Bearer <Firebase ID token>`. The Worker verifies it against Google's public keys and never trusts a uid from the request body.
 - The Worker writes Firestore through the REST API as a service account (secret `FIREBASE_SERVICE_ACCOUNT`), inside a transaction. `firestore.rules` keeps blocking those writes from browsers.
@@ -38,8 +39,28 @@ Vanilla multi-page JavaScript site (ES modules, no framework, no build step) on 
 - Uploads: the frontend gets a presigned URL from the Worker, then `PUT`s the file straight to R2.
   - Presigning uses `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner` with `requestChecksumCalculation: 'WHEN_REQUIRED'`. Without it, browser PUTs fail.
 - Frontend: `callOp(op, payload)` and `backend.upload()` in `shared/js/firebase.js` call the Worker at `API_URL` (from `WORKER_URL` in `shared/js/config.js`; `http://127.0.0.1:8787` when using the emulators).
-- Secrets go in through `npx wrangler secret put`, never committed: `FIREBASE_SERVICE_ACCOUNT`, `SUPERADMIN_EMAIL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `MPESA_CALLBACK_TOKEN`.
+- Secrets go in through `npx wrangler secret put`, never committed: `FIREBASE_SERVICE_ACCOUNT`, `SUPERADMIN_EMAIL`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `MPESA_CALLBACK_TOKEN`, `RESEND_API_KEY`.
 - Cloudflare free plan: 50 subrequests per request. Every Firestore read, query or commit is one subrequest, so keep operations from reading documents one by one in long loops.
+
+## Payments (Lipa na M-Pesa, manual confirmation)
+
+- `PAYMENT_PROVIDER = "mpesa_manual"`. Members send money to the number in `systemSettings/platform.mpesaNumber` (default 0720274530, editable in System configuration), then enter the 10-character M-Pesa code in the payment window (`paymentFlow` in `features.js`).
+- `paymentSubmitCode` moves the payment to `awaiting_verification`, reserves the code in `mpesaCodes/<code>` (a code can be used once) and notifies every admin with the `payments` permission.
+- An admin confirms or rejects it on `/admin/payments` (`paymentReview`). Confirming runs the same `applyPaymentEvent` as a provider webhook, so access, receipts and revenue follow automatically. Revenue counts only `success` (and the kept part of `refunded`).
+- Admin pages: `/admin/payments` (M-Pesa confirmations) and `/admin/revenue`. Members see their records on `/app/payments` (every role's menu).
+
+## Emails
+
+- Every notification a trusted operation writes (`notify()` in `trusted-ops.js`) is also emailed after the transaction commits (`worker/src/email.js`, sent with Resend in `ctx.waitUntil`). One layout for every email, in the SportsHub theme. To email something new, write a notification; do not send email elsewhere.
+- Needs the `RESEND_API_KEY` secret and `EMAIL_FROM` on a domain verified in Resend. Without the key, emails are skipped silently.
+- The recipient address is `usersPrivate/<uid>.email`. Payment, account, welcome and verification emails always send; other types follow the member's notification preferences.
+
+## Speed and SEO
+
+- Instant pages: while a page first loads, `db.get`, `db.list` and `db.count` answer from a per-user localStorage cache, then `ui.js` re-checks them live and redraws only if something changed. Any write (`callOp`, `db.add/set/update/remove`) or sign-out clears the cache. Keep page reads going through `db`.
+- Every page head has unique SEO title and description, robots (dashboards, admin, auth forms, cart, search: noindex), canonical, Open Graph and Twitter tags, modulepreload for every shared module, preconnects, and speculation rules that prerender a page while its link is hovered. Copy that head pattern for any new page.
+- Detail views set `S.pageTitle`, `S.pageDesc`, `S.pageImage` and `S.pageLd` (schema.org); `setMeta` in `ui.js` writes them with a canonical that keeps only `id`/`page`.
+- `sitemap.xml` (fixed pages and sports) and `robots.txt` are at the site root; the Worker serves the rest of the sitemap.
 
 ## Authorized domains
 

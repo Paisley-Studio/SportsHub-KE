@@ -4,7 +4,8 @@
 #   FIREBASE_SERVICE_ACCOUNT   the whole service-account JSON key (Firebase console > Project settings > Service accounts)
 #   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
 #   SUPERADMIN_EMAIL           the account allowed to run first-time setup at /setup/
-#   MPESA_CALLBACK_TOKEN       only once M-Pesa is installed
+#   MPESA_CALLBACK_TOKEN       only once M-Pesa STK (Daraja) is installed
+#   RESEND_API_KEY             email sending (resend.com). Emails are skipped until it is set.
 name = "sportshub-uploads"
 main = "src/index.js"
 compatibility_date = "2025-09-01"
@@ -26,7 +27,12 @@ FIREBASE_PROJECT_ID = "sportshub-9c219"
 # Leave empty to serve files through this Worker at /files/<key>.
 PUBLIC_BASE = ""
 ALLOWED_ORIGINS = "http://127.0.0.1:5500,http://localhost:5500,https://sportshub.co.ke,https://www.sportshub.co.ke,https://sportshub-9c219.web.app,https://sportshub-9c219.firebaseapp.com"
-PAYMENT_PROVIDER = "simulation"
+# mpesa_manual: members pay 0720274530 by Lipa na M-Pesa, enter the code, and an administrator confirms it.
+PAYMENT_PROVIDER = "mpesa_manual"
 # "true" only while testing before a real payment provider is installed. Never with real users.
 ALLOW_SIMULATED_PAYMENTS = "false"
 RATE_LIMIT_PER_MINUTE = "90"
+# Emails: the sender must be on a domain verified in Resend. Links in emails point at SITE_URL.
+EMAIL_FROM = "SportsHub-KE <notifications@sportshub.co.ke>"
+EMAIL_REPLY_TO = ""
+SITE_URL = "https://sportshub.co.ke"

@@ -1,5 +1,6 @@
 import { img, sportPhoto, BRAND, COUNTY_NAMES, townsOf, SKILLS, ROLE_LABEL, ROLE_COLOR, STATUS_TONE, esc, fmtHtml, html, raw, ic, $, $$, debounce, money, compact, initials, titleCase, fmtDT, countyLatLng, readImage, Rules, SPORT_COLORS, SPORTS_CATALOGUE } from './core.js';
-import { genId, db, auth, backend, callOp } from './firebase.js';
+import { genId, db, auth, backend, callOp, instantPages } from './firebase.js';
+import { SITE_URL } from './config.js';
 
 /* ==========================================================================
    SPORTSHUB-KE INTERFACE KIT
@@ -171,10 +172,23 @@ export const setQuery = patch => {
 };
 /* ----- Page lifecycle ----- */
 export let PAGE = null, renderToken = 0;
-export const setMeta = (title, desc) => {
-  document.title = title ? `${title} | SportsHub-KE` : 'SportsHub-KE | One platform. Every sport. Every player.';
-  const m = $('meta[name=description]'); if (m && desc) m.content = desc;
-  const og = $('meta[property="og:title"]'); if (og) og.content = document.title;
+/* Search engines read the rendered page: each page keeps its own written title and description unless a view
+   names the record it shows (a game, a venue). The canonical address keeps only the record id, so filtered
+   lists do not compete with each other. Views can add structured data through S.pageLd. */
+const BASE_META = { title: document.title, desc: (document.querySelector('meta[name=description]') || {}).content || '' };
+const metaTag = (attr, key, val) => { let m = document.head.querySelector(`meta[${attr}="${key}"]`); if (!m) { m = document.createElement('meta'); m.setAttribute(attr, key); document.head.appendChild(m); } m.setAttribute('content', val); };
+export const setMeta = (title, desc, ld, image) => {
+  const t = title ? `${title} | SportsHub-KE` : BASE_META.title, d = String(desc || BASE_META.desc).replace(/\s+/g, ' ').trim().slice(0, 160);
+  document.title = t;
+  metaTag('name', 'description', d); metaTag('property', 'og:title', t); metaTag('property', 'og:description', d); metaTag('name', 'twitter:title', t); metaTag('name', 'twitter:description', d);
+  if (image) { const abs = new URL(image, SITE_URL).href; metaTag('property', 'og:image', abs); metaTag('name', 'twitter:image', abs); }
+  const q = new URLSearchParams(location.search), keep = new URLSearchParams(); ['id', 'page'].forEach(k => { if (q.get(k)) keep.set(k, q.get(k)); });
+  const url = `${SITE_URL}${location.pathname.replace(/index\.html$/, '')}${keep.toString() ? `?${keep}` : ''}`;
+  let c = document.head.querySelector('link[rel=canonical]'); if (!c) { c = document.createElement('link'); c.rel = 'canonical'; document.head.appendChild(c); }
+  c.href = url; metaTag('property', 'og:url', url);
+  let s = document.getElementById('page-ld');
+  if (ld) { if (!s) { s = document.createElement('script'); s.type = 'application/ld+json'; s.id = 'page-ld'; document.head.appendChild(s); } s.textContent = JSON.stringify({ '@context': 'https://schema.org', ...ld }); }
+  else if (s) s.remove();
 };
 /* While a page loads: one calm loader in the brand colours. The footer stays hidden until the content is in. */
 export const skeleton = () => html`<div class="loader" role="status" aria-live="polite"><span class="ld-ring" aria-hidden="true">${raw('<i></i>'.repeat(8))}</span><span class="ld-t">Loading</span></div>`;
@@ -232,21 +246,43 @@ export const countUp = root => { if (countObserver) $$('[data-countup]:not([data
 export async function renderMain(token = renderToken, entering = false) {
   const box = slot(); if (!box || !PAGE) return;
   const y = window.scrollY;
+  let usedCache = null;
   try {
     runLeave();
     const content = await PAGE.view(S.params);
+    /* The first draw of a page may come from this device's cache; check it against live data straight after. */
+    if (instantOpen) { instantOpen = false; usedCache = instantPages.stop(); }
     if (token !== renderToken) { onMountQ.length = 0; return; }
     if (content === undefined) return;
     box.innerHTML = fmtHtml(content);
     if (entering) { box.classList.remove('page-enter'); void box.offsetWidth; box.classList.add('page-enter'); } else window.scrollTo({ top: y, behavior: 'instant' });
-    setMeta(S.pageTitle !== undefined ? S.pageTitle : PAGE.meta.title, S.pageDesc || PAGE.meta.desc); S.pageTitle = undefined; S.pageDesc = undefined;
+    setMeta(S.pageTitle, S.pageDesc, S.pageLd, S.pageImage); S.pageTitle = undefined; S.pageDesc = undefined; S.pageLd = undefined; S.pageImage = undefined;
     flushMount(box); updateChrome(); document.body.dataset.ready = '1';
+    if (usedCache && usedCache.length) revalidate(usedCache);
   } catch (e) {
+    if (instantOpen) { instantOpen = false; instantPages.stop(); }
     console.error(e);
     if (token === renderToken) box.innerHTML = html`<div class="wrap section" style="padding-top:120px">${emptyState('triangle-alert', 'This page could not load', e.message || 'Please try again.', html`<button class="btn" data-act="reload">Try again</button>`)}</div>`.s;
   }
 }
 A.reload = () => renderMain();
+/* Instant pages: reads between boot and the first draw may be answered from cache (firebase.js). */
+let instantOpen = false;
+const revalidate = async used => {
+  const token = renderToken;
+  if (!(await instantPages.changed(used)) || token !== renderToken) return;
+  try { await loadCatalog(); await refreshSession(); } catch (e) { console.warn('Refresh failed:', e); }
+  if (token !== renderToken) return;
+  if (S.shell === 'public') { const h = $('.head-acts'); if (h) { h.innerHTML = headActs().s; rewriteLinks(); } }
+  renderMain(renderToken, false);
+};
+/* Sports catalogue and platform settings, needed by every page. */
+const loadCatalog = async () => {
+  const [sports, settings] = await Promise.all([db.list('sports', { limit: 100 }), db.get('systemSettings', 'platform')]);
+  /* A brand-new project has no sports until first-run setup; the catalogue shows until then. */
+  S.sports = (sports.length ? sports : SPORTS_CATALOGUE).map(s => ({ ...s, photo: sportPhoto(s) })).sort((a, b) => { const x = SPORTS_CATALOGUE.findIndex(c => c.id === a.id), y = SPORTS_CATALOGUE.findIndex(c => c.id === b.id); return (x < 0 ? 99 : x) - (y < 0 ? 99 : y); });
+  if (settings) S.settings = { ...S.settings, ...settings };
+};
 export const notFound = async () => { S.pageTitle = 'Page not found'; return html`<div class="wrap section" style="padding-top:130px">${emptyState('map-pin-off', 'We could not find that page', 'It may have moved, or the record may no longer be available.', html`<a class="btn" href="#/">Back to home</a>`)}</div>`; };
 /* Each page calls route() once. The platform boots, the shell draws, then the view renders. */
 export const route = (pattern, view, meta = {}) => {
@@ -264,10 +300,8 @@ export const boot = async () => {
   try {
     const ready = await backend.init();
     if (!ready.ok) { renderSetupScreen(ready.reason); return; }
-    const [sports, settings] = await Promise.all([db.list('sports', { limit: 100 }), db.get('systemSettings', 'platform')]);
-    /* A brand-new project has no sports until first-run setup; the catalogue shows until then. */
-    S.sports = (sports.length ? sports : SPORTS_CATALOGUE).map(s => ({ ...s, photo: sportPhoto(s) })).sort((a, b) => { const x = SPORTS_CATALOGUE.findIndex(c => c.id === a.id), y = SPORTS_CATALOGUE.findIndex(c => c.id === b.id); return (x < 0 ? 99 : x) - (y < 0 ? 99 : y); });
-    if (settings) S.settings = { ...S.settings, ...settings };
+    instantOpen = true; instantPages.start();
+    await loadCatalog();
     let first = true;
     auth.onChange(async uid => {
       if (S.registering) return; /* The registration form finishes its own steps. */
@@ -320,7 +354,7 @@ document.addEventListener('click', async e => {
     const fn = A[el.dataset.act];
     if (!fn) { console.error('No action registered:', el.dataset.act); return; }
     if (el.matches('a')) e.preventDefault();
-    if (el.disabled || el.classList.contains('is-busy')) return;
+    if (el.disabled || el.getAttribute('aria-busy') === 'true') return;
     const done = busy(el);
     try { await fn(el.dataset, el, e); } catch (err) { if (err && err.name !== 'Handled') showErr(err); }
     finally { done(); }
@@ -341,7 +375,7 @@ document.addEventListener('submit', async e => {
   const fn = F[form.dataset.form];
   if (!fn) { console.error('No form registered:', form.dataset.form); return; }
   const btn = (e.submitter && e.submitter.matches('.btn') ? e.submitter : null) || form.querySelector('[type=submit]') || $(`[form="${form.id}"]`);
-  if (btn && btn.classList.contains('is-busy')) return;
+  if (btn && btn.getAttribute('aria-busy') === 'true') return;
   const errBox = $('.form-err', form); if (errBox) errBox.classList.add('hide');
   const done = btn ? busy(btn) : () => {};
   try { await fn(formValues(form), form, e); }
@@ -354,7 +388,8 @@ const BUSY_MIN = 450;
 function busy(el) {
   const t0 = performance.now();
   el.classList.add('is-busy'); el.setAttribute('aria-busy', 'true');
-  return () => setTimeout(() => { el.classList.remove('is-busy'); el.removeAttribute('aria-busy'); }, Math.max(0, BUSY_MIN - (performance.now() - t0)));
+  /* Clickable again as soon as the work ends (say, after an error); the spinner alone finishes its moment. */
+  return () => { el.removeAttribute('aria-busy'); setTimeout(() => { if (el.getAttribute('aria-busy') !== 'true') el.classList.remove('is-busy'); }, Math.max(0, BUSY_MIN - (performance.now() - t0))); };
 }
 /* Coming back with the browser's Back button restores the page as it was left; clear any spinning links. */
 window.addEventListener('pageshow', e => { if (e.persisted) $$('a.btn.is-busy').forEach(a => a.classList.remove('is-busy')); });
@@ -612,13 +647,13 @@ export const dashHero = ({ c = 'blue', title, sub, action, photo, kick }) => htm
 /* ----- Role navigation ----- */
 /* ----- Registration and member dashboards. Each account type has its own navigation, home and priorities. ----- */
 export const COMMON_NAV = { title: 'Connect', items: [['/app/calendar', 'calendar', 'Calendar'], ['/app/messages', 'message-square', 'Messages', 'msg'], ['/app/notifications', 'bell', 'Notifications', 'notif'], ['/community', 'newspaper', 'Community']] };
-export const ACCOUNT_NAV = { title: 'Account', items: [['/app/profile', 'user', 'Profile'], ['/app/ads', 'megaphone', 'Advertising'], ['/app/settings', 'settings', 'Settings']] };
+export const ACCOUNT_NAV = { title: 'Account', items: [['/app/profile', 'user', 'Profile'], ['/app/payments', 'receipt', 'Payments'], ['/app/ads', 'megaphone', 'Advertising'], ['/app/settings', 'settings', 'Settings']] };
 export const navFor = role => {
   if (role === 'admin') return adminNav();
   const map = {
     player: [{ items: [['/app', 'layout-dashboard', 'Home'], ['/app/membership', 'badge-check', 'Membership'], ['/app/games', 'calendar-days', 'My games'], ['/app/bookings', 'ticket', 'Bookings'], ['/app/teams', 'users', 'My teams']] },
       { title: 'Performance', items: [['/app/stats', 'chart-column', 'Statistics'], ['/app/requests', 'inbox', 'Contact requests']] },
-      { title: 'Money', items: [['/app/transfers', 'arrow-left-right', 'Session transfers'], ['/app/payments', 'receipt', 'Payments'], ['/app/orders', 'shopping-bag', 'Orders']] }, COMMON_NAV, ACCOUNT_NAV],
+      { title: 'Money', items: [['/app/transfers', 'arrow-left-right', 'Session transfers'], ['/app/orders', 'shopping-bag', 'Orders']] }, COMMON_NAV, ACCOUNT_NAV],
     captain: [{ items: [['/app/team', 'layout-dashboard', 'Team home'], ['/app/team/squad', 'users', 'Squad'], ['/app/team/fixtures', 'calendar-days', 'Fixtures'], ['/app/team/challenges', 'swords', 'Challenges'], ['/app/team/training', 'dumbbell', 'Training'], ['/app/team/transfers', 'arrow-left-right', 'Transfers']] }, COMMON_NAV, ACCOUNT_NAV],
     coach: [{ items: [['/app/coach', 'layout-dashboard', 'Coach home'], ['/app/coach/roster', 'users', 'Roster'], ['/app/coach/training', 'dumbbell', 'Training'], ['/app/coach/academy', 'building-2', 'Academy profile']] }, COMMON_NAV, ACCOUNT_NAV],
     vendor: [{ items: [['/app/store', 'layout-dashboard', 'Sales overview'], ['/app/store/products', 'package', 'Products and inventory'], ['/app/store/orders', 'shopping-bag', 'Orders'], ['/app/store/promotions', 'tag', 'Promotions'], ['/app/store/reviews', 'star', 'Reviews'], ['/app/store/payouts', 'wallet', 'Commissions and payouts'], ['/app/store/profile', 'store', 'Store profile']] }, COMMON_NAV, ACCOUNT_NAV],
@@ -628,7 +663,7 @@ export const navFor = role => {
   };
   return map[role] || map.player;
 };
-export const tabsFor = role => role === 'admin' ? [['/admin', 'layout-dashboard', 'Overview'], ['/admin/users', 'users', 'Users'], ['/admin/reports', 'file-text', 'Reports'], ['/admin/audit', 'scroll-text', 'Audit']] : ({
+export const tabsFor = role => role === 'admin' ? [['/admin', 'layout-dashboard', 'Overview'], ['/admin/payments', 'banknote', 'Confirm'], ['/admin/revenue', 'trending-up', 'Revenue'], ['/admin/users', 'users', 'Users']] : ({
   player: [['/app', 'layout-dashboard', 'Home'], ['/games', 'calendar-days', 'Games'], ['/app/membership', 'badge-check', 'Sessions'], ['/app/messages', 'message-square', 'Chat']],
   captain: [['/app/team', 'layout-dashboard', 'Team'], ['/app/team/squad', 'users', 'Squad'], ['/app/team/fixtures', 'calendar-days', 'Fixtures'], ['/app/messages', 'message-square', 'Chat']],
   coach: [['/app/coach', 'layout-dashboard', 'Home'], ['/app/coach/roster', 'users', 'Roster'], ['/app/coach/training', 'dumbbell', 'Training'], ['/app/messages', 'message-square', 'Chat']],
@@ -645,7 +680,7 @@ export const ADMIN_MODULES = [
   ['Sport', [['sports', 'volleyball', 'Sports and disciplines', 'sports'], ['games', 'calendar-days', 'Games and events', 'games'], ['tournaments', 'trophy', 'Tournament management', 'tournaments']]],
   ['Venues', [['facilities', 'map-pin', 'Facility approvals', 'facilities'], ['venues', 'land-plot', 'Venue management', 'facilities']]],
   ['Marketplace', [['vendors', 'store', 'Vendor approvals', 'vendors'], ['moderation-products', 'package-check', 'Marketplace moderation', 'marketplace'], ['products', 'package', 'Product management', 'marketplace'], ['orders', 'shopping-bag', 'Orders and disputes', 'orders']]],
-  ['Finance', [['membership', 'badge-check', 'Membership management', 'membership'], ['pay-registration', 'receipt', 'Registration payments', 'payments'], ['pay-membership', 'credit-card', 'Monthly subscription payments', 'payments'], ['credits', 'coins', 'Session-credit management', 'credits'], ['transfers', 'arrow-left-right', 'Membership transfers', 'transfers'], ['settlements', 'wallet', 'Facility settlements', 'settlements']]],
+  ['Finance', [['revenue', 'trending-up', 'Revenue', 'payments'], ['payments', 'banknote', 'M-Pesa confirmations', 'payments'], ['membership', 'badge-check', 'Membership management', 'membership'], ['pay-registration', 'receipt', 'Registration payments', 'payments'], ['pay-membership', 'credit-card', 'Monthly subscription payments', 'payments'], ['credits', 'coins', 'Session-credit management', 'credits'], ['transfers', 'arrow-left-right', 'Membership transfers', 'transfers'], ['settlements', 'wallet', 'Facility settlements', 'settlements']]],
   ['Commercial', [['ads', 'megaphone', 'Advertising management', 'ads'], ['sponsorship', 'layout-template', 'Sponsorship and featured', 'featured']]],
   ['Trust', [['mod-messages', 'message-square-warning', 'Messaging moderation', 'moderation'], ['mod-feed', 'newspaper', 'Social feed moderation', 'moderation'], ['announce', 'bell-ring', 'Notifications and announcements', 'notifications']]],
   ['System', [['reports', 'file-text', 'Reports and exports', 'reports'], ['config', 'settings', 'System configuration', 'config'], ['roles', 'key-round', 'Roles and permissions', 'roles'], ['audit', 'scroll-text', 'Audit logs', 'audit']]]

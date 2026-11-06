@@ -20,6 +20,7 @@
     { "collectionGroup": "paymentTransactions", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "uid", "order": "ASCENDING" }, { "fieldPath": "initiatedAt", "order": "DESCENDING" }] },
     { "collectionGroup": "paymentTransactions", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "uid", "order": "ASCENDING" }, { "fieldPath": "type", "order": "ASCENDING" }, { "fieldPath": "initiatedAt", "order": "DESCENDING" }] },
     { "collectionGroup": "paymentTransactions", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "type", "order": "ASCENDING" }, { "fieldPath": "initiatedAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "paymentTransactions", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "submittedAt", "order": "ASCENDING" }] },
     { "collectionGroup": "sessionBookings", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "uid", "order": "ASCENDING" }, { "fieldPath": "covered", "order": "ASCENDING" }, { "fieldPath": "start", "order": "DESCENDING" }] },
     { "collectionGroup": "sessionBookings", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "end", "order": "ASCENDING" }] },
     { "collectionGroup": "facilityBookings", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "uid", "order": "ASCENDING" }, { "fieldPath": "start", "order": "DESCENDING" }] },

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Revenue | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#FFFAF2">
+<meta name="application-name" content="SportsHub-KE">
+<meta name="apple-mobile-web-app-title" content="SportsHub-KE">
+<meta name="format-detection" content="telephone=no">
+<meta name="geo.region" content="KE">
+<meta name="geo.placename" content="Nairobi, Kenya">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
+<link rel="dns-prefetch" href="https://securetoken.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/config.js">
+<link rel="modulepreload" href="/shared/js/core.js">
+<link rel="modulepreload" href="/shared/js/firebase.js">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="/shared/js/features.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+<script type="speculationrules">{"prerender":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/auth/*","/admin/*","/setup/*","/marketplace/checkout/*","/dashboard/notifications/*","/dashboard/messages/*","/*\\?*page=*"]}},{"not":{"selector_matches":"[data-act], [target], [download], .no-prerender"}}]},"eagerness":"moderate"}],"prefetch":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/admin/*","/setup/*"]}},{"not":{"selector_matches":"[data-act], [target], [download]"}}]},"eagerness":"moderate"}]}</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, money, pct, fmtDT, csvDownload } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { A, S, route, table, badge, emptyState, barChart, hbars, setQuery } from '/shared/js/ui.js';
+import { pageHead, adminPage, adminView, lastMonths, monthLabel } from '/shared/js/features.js';
+
+/* ----- Revenue: every payment (M-Pesa confirmations included) once it is confirmed ----- */
+const RANGES = [['30', '30 days'], ['90', '90 days'], ['365', '12 months'], ['all', 'All time']];
+const STREAMS = [['membership', 'Monthly membership', 'var(--green)'], ['registration', 'Registration fees', 'var(--blue)'], ['order', 'Marketplace orders', 'var(--magenta)']];
+const kept = t => t.status === 'success' ? t.amount : t.status === 'refunded' ? Math.max(0, t.amount - (t.refundAmount || 0)) : 0;
+const day = iso => (iso || '').slice(0, 10);
+const when = t => t.completedAt || t.initiatedAt || '';
+const short = v => v >= 1000 ? `${Math.round(v / 1000)}K` : v;
+let cache = [];
+adminView.revenue = async () => {
+  const range = RANGES.some(r => r[0] === S.query.range) ? S.query.range : '90';
+  const [all, campaigns] = await Promise.all([db.list('paymentTransactions', { orderBy: ['initiatedAt', 'desc'], limit: 3000 }), db.list('advertisingCampaigns', { limit: 300 })]);
+  cache = all;
+  const since = range === 'all' ? '' : new Date(Date.now() - Number(range) * 864e5).toISOString();
+  const done = all.filter(t => ['success', 'refunded'].includes(t.status) && when(t) >= since);
+  const total = done.reduce((a, t) => a + kept(t), 0), refunds = done.reduce((a, t) => a + (t.refundAmount || 0), 0);
+  const waiting = all.filter(t => t.status === 'awaiting_verification'), waitingV = waiting.reduce((a, t) => a + t.amount, 0);
+  const thisM = new Date().toISOString().slice(0, 7), prevD = new Date(); prevD.setUTCDate(15); prevD.setUTCMonth(prevD.getUTCMonth() - 1);
+  const prevM = prevD.toISOString().slice(0, 7);
+  const monthSum = k => all.filter(t => (t.completedAt || '').slice(0, 7) === k).reduce((a, t) => a + kept(t), 0);
+  const mNow = monthSum(thisM), mPrev = monthSum(prevM), change = mPrev ? Math.round((mNow - mPrev) / mPrev * 100) : null;
+  const payers = new Set(done.map(t => t.uid)).size, avg = done.length ? Math.round(total / done.length) : 0;
+  const tried = all.filter(t => (t.initiatedAt || '') >= since && t.status !== 'pending'), conv = tried.length ? pct(done.length, tried.length) : 0;
+  const adv = campaigns.reduce((a, x) => a + (x.bookedRevenue || 0), 0);
+  const commission = Math.round(done.filter(t => t.type === 'order').reduce((a, t) => a + kept(t), 0) * (S.settings.commissionRate || 0));
+  const months = lastMonths(12).map(k => ({ l: monthLabel(k), v: monthSum(k) }));
+  const days = Array.from({ length: 30 }, (_, i) => {
+    const d = new Date(Date.now() - (29 - i) * 864e5).toISOString().slice(0, 10);
+    return { l: i % 5 === 4 || i === 29 ? String(Number(d.slice(8))) : '', v: all.filter(t => day(t.completedAt) === d).reduce((a, t) => a + kept(t), 0) };
+  });
+  const streams = STREAMS.map(([k, l, c]) => [l, done.filter(t => t.type === k).reduce((a, t) => a + kept(t), 0), c]), streamTot = streams.reduce((a, s) => a + s[1], 0);
+  const byMember = {}; done.forEach(t => { const k = `${t.userName || 'Member'} · ${t.memberId || ''}`; byMember[k] = (byMember[k] || 0) + kept(t); });
+  const best = days.reduce((a, d) => (d.v > a.v ? d : a), { v: 0 });
+  const label = RANGES.find(r => r[0] === range)[1].toLowerCase();
+  const trend = change === null ? html`<span class="xs faint">Nothing last month to compare</span>` : html`<span class="xs ${change >= 0 ? 'trend-up' : 'trend-down'}">${change >= 0 ? '▲' : '▼'} ${Math.abs(change)}% vs ${monthLabel(prevM)}</span>`;
+  const swatch = c => html`<i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${c}"></i>`;
+  const cols = [
+    { h: 'Date', v: t => fmtDT(when(t)) },
+    { h: 'Member', v: t => html`<span class="semi">${t.userName}</span><br><span class="xs faint">${t.memberId || ''}</span>` },
+    { h: 'For', v: t => t.description },
+    { h: 'Method', v: t => (t.provider === 'mpesa_manual' ? html`M-Pesa <code class="mp-chip">${t.mpesaCode || '-'}</code>` : t.simulated ? html`<span class="tag sim">Simulated</span>` : t.provider || '') },
+    { h: 'Amount', right: true, v: t => html`<b>${money(t.amount)}</b>` },
+    { h: 'Status', v: t => badge(t.status) }
+  ];
+  const recent = all.filter(t => t.status !== 'pending' && (t.initiatedAt || '') >= since).slice(0, 60);
+  return html`${pageHead('Revenue', 'Confirmed payments only. M-Pesa codes count once an administrator confirms them.', html`<div class="row"><div class="tabs" role="tablist" style="margin:0">${RANGES.map(([k, l]) => html`<button class="tab ${k === range ? 'on' : ''}" role="tab" aria-selected="${k === range}" data-act="revRange" data-v="${k}">${l}</button>`)}</div><button class="btn btn-ghost" data-act="revExport">${ic('download')} Export</button></div>`)}
+    <div class="rev-kpis">
+      <div class="rk c-green"><span class="l">Revenue, ${label}</span><b class="v">${money(total)}</b><span class="xs faint">${done.length} payment${done.length === 1 ? '' : 's'}${refunds ? ` · ${money(refunds)} refunded` : ''}</span></div>
+      <div class="rk c-blue"><span class="l">This month</span><b class="v">${money(mNow)}</b>${trend}</div>
+      <div class="rk c-yellow"><span class="l">Waiting for confirmation</span><b class="v">${money(waitingV)}</b>${waiting.length ? html`<a class="xs semi" href="#/admin/payments">${waiting.length} to confirm ${ic('arrow-right')}</a>` : html`<span class="xs faint">All confirmed</span>`}</div>
+      <div class="rk c-magenta"><span class="l">Paying members</span><b class="v">${payers}</b><span class="xs faint">Average ${money(avg)} · ${conv}% of attempts completed</span></div>
+    </div>
+    <div class="grid g2 mt-lg">
+      <div class="panel"><div class="panel-head"><h3>Monthly revenue</h3><span class="small muted">Last 12 months</span></div>${barChart(months, { c: 'var(--green)', fmtV: short })}</div>
+      <div class="panel"><div class="panel-head"><h3>Last 30 days</h3><span class="small muted">${best.v ? `Best day ${money(best.v)}` : 'Daily'}</span></div>${barChart(days, { c: 'var(--blue)', fmtV: v => (v ? short(v) : '') })}</div>
+    </div>
+    <div class="grid g2 mt-lg">
+      <div class="panel"><div class="panel-head"><h3>Where it comes from</h3><span class="small muted">This period</span></div>
+        ${streamTot ? html`<div class="stackbar" role="img" aria-label="${streams.map(s => `${s[0]}: ${money(s[1])}`).join(', ')}">${streams.filter(s => s[1]).map((s, i) => html`<i style="width:${s[1] / streamTot * 100}%;background:${s[2]};animation-delay:${i * 90}ms"></i>`)}</div>` : ''}
+        <div class="side-list mt small">${streams.map(s => html`<div class="row between"><span class="row sm">${swatch(s[2])}${s[0]}</span><span class="nums"><b>${money(s[1])}</b> <span class="faint">${pct(s[1], streamTot || 1)}%</span></span></div>`)}
+          <div class="row between"><span class="row sm">${swatch('var(--yellow)')}Advertising booked</span><span class="nums"><b>${money(adv)}</b></span></div>
+          <div class="row between faint"><span>Platform share of marketplace (${Math.round((S.settings.commissionRate || 0) * 100)}% commission)</span><span class="nums">${money(commission)}</span></div></div></div>
+      <div class="panel"><div class="panel-head"><h3>Top paying members</h3><span class="small muted">This period</span></div>${Object.keys(byMember).length ? hbars(Object.entries(byMember).sort((a, b) => b[1] - a[1]).slice(0, 8), 'var(--magenta)', money) : html`<p class="small muted">Appears after the first confirmed payment.</p>`}</div>
+    </div>
+    <section class="mt-lg"><div class="blk-h"><h2>Payments</h2><span class="k">Newest first</span></div>${table(cols, recent, emptyState('receipt', 'No payments yet', 'Payments appear here as members pay.'))}</section>`;
+};
+A.revRange = d => setQuery({ range: d.v === '90' ? '' : d.v });
+A.revExport = () => csvDownload(`sportshub-revenue-${new Date().toISOString().slice(0, 10)}.csv`, [['Date', 'Member', 'Member ID', 'For', 'Type', 'Method', 'M-Pesa code', 'Amount', 'Kept after refunds', 'Status', 'Receipt'],
+  ...cache.filter(t => t.status !== 'pending').map(t => [when(t), t.userName, t.memberId, t.description, t.type, t.provider, t.mpesaCode || '', t.amount, kept(t), t.status, t.receiptNo || ''])]);
+route('/admin/revenue', adminPage('revenue'), { shell: 'app', auth: true, admin: true, title: 'Revenue' });
+</script>
+</body>
+</html>

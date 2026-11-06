@@ -3,24 +3,46 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>SportsHub-KE | One platform. Every sport. Every player.</title>
-<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<title>Sports Facility | SportsHub-KE</title>
+<meta name="description" content="Prices, opening hours and availability for this sports facility. Book on SportsHub-KE.">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
 <meta name="theme-color" content="#FFFAF2">
+<meta name="application-name" content="SportsHub-KE">
+<meta name="apple-mobile-web-app-title" content="SportsHub-KE">
+<meta name="format-detection" content="telephone=no">
+<meta name="geo.region" content="KE">
+<meta name="geo.placename" content="Nairobi, Kenya">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="SportsHub-KE">
-<meta property="og:title" content="SportsHub-KE | One platform. Every sport. Every player.">
-<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
-<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta property="og:locale" content="en_KE">
+<meta property="og:title" content="Sports Facility | SportsHub-KE">
+<meta property="og:description" content="Prices, opening hours and availability for this sports facility. Book on SportsHub-KE.">
+<meta property="og:url" content="https://sportshub.co.ke/facilities/view/">
+<meta property="og:image" content="https://sportshub.co.ke/assets/photos/facility.webp">
+<meta property="og:image:alt" content="Sports Facility | SportsHub-KE">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Sports Facility | SportsHub-KE">
+<meta name="twitter:description" content="Prices, opening hours and availability for this sports facility. Book on SportsHub-KE.">
+<meta name="twitter:image" content="https://sportshub.co.ke/assets/photos/facility.webp">
 <link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
+<link rel="dns-prefetch" href="https://securetoken.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/config.js">
+<link rel="modulepreload" href="/shared/js/core.js">
+<link rel="modulepreload" href="/shared/js/firebase.js">
 <link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="/shared/js/features.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+<script type="speculationrules">{"prerender":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/auth/*","/admin/*","/setup/*","/marketplace/checkout/*","/dashboard/notifications/*","/dashboard/messages/*","/*\\?*page=*"]}},{"not":{"selector_matches":"[data-act], [target], [download], .no-prerender"}}]},"eagerness":"moderate"}],"prefetch":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/admin/*","/setup/*"]}},{"not":{"selector_matches":"[data-act], [target], [download]"}}]},"eagerness":"moderate"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://sportshub.co.ke/"},{"@type":"ListItem","position":2,"name":"Facilities","item":"https://sportshub.co.ke/facilities/view/"}]},{"@type":"WebPage","name":"Sports Facility | SportsHub-KE","description":"Prices, opening hours and availability for this sports facility. Book on SportsHub-KE.","url":"https://sportshub.co.ke/facilities/view/","isPartOf":{"@id":"https://sportshub.co.ke/#site"},"inLanguage":"en-KE"}]}</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -84,6 +106,9 @@ route('/facilities/:id', async ({ id }) => {
   const f = await db.get('facilities', id);
   if (!f || (f.status !== 'approved' && f.ownerId !== S.uid && !S.adminRole)) return notFound();
   S.pageTitle = f.name;
+  S.pageDesc = `${f.name}, ${[f.town, f.county].filter(Boolean).join(', ')}. ${String(f.description || 'Sports facility').slice(0, 110)} Book on SportsHub-KE.`;
+  S.pageImage = (f.photos || [])[0];
+  S.pageLd = { '@type': 'SportsActivityLocation', name: f.name, description: f.description || '', image: (f.photos || []).slice(0, 4).map(x => new URL(x, location.href).href), address: { '@type': 'PostalAddress', addressLocality: f.town || '', addressRegion: f.county || '', addressCountry: 'KE' }, ...(f.lat && f.lng ? { geo: { '@type': 'GeoCoordinates', latitude: f.lat, longitude: f.lng } } : {}), ...(f.reviewCount ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: f.rating, reviewCount: f.reviewCount } } : {}), url: location.href };
   const res = (await db.list('facilityResources', { where: [['facilityId', '==', id], ['active', '==', true]], limit: 30 }));
   const reviews = await db.list('reviews', { where: [['targetType', '==', 'facility'], ['targetId', '==', id]], limit: 8 });
   const games = await db.list('games', qUpcoming([['facilityId', '==', id]], 5));

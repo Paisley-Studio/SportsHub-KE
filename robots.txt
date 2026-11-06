@@ -1,0 +1,16 @@
+# SportsHub-KE. One platform. Every sport. Every player.
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /setup/
+Disallow: /auth/login/
+Disallow: /auth/register/form/
+Disallow: /marketplace/cart/
+Disallow: /marketplace/checkout/
+Disallow: /search/
+Disallow: /games/new/
+
+# Fixed pages, then every public game, venue, coach, team, competition, product and athlete (built live by the SportsHub server).
+Sitemap: https://sportshub.co.ke/sitemap.xml
+Sitemap: https://sportshub-uploads.manchamdevelopers.workers.dev/sitemap.xml

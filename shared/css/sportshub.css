@@ -89,7 +89,8 @@ svg.i{width:1.1em;height:1.1em;stroke:currentColor;fill:none;stroke-width:1.8;st
 .btn:active{transform:translateY(0) scale(.985)}
 .btn[disabled]{opacity:.55;cursor:not-allowed;transform:none}
 /* Busy: the label hides and a spinner turns in its place, so a press always shows it was heard. */
-.btn.is-busy{cursor:progress;transform:none;box-shadow:none;color:transparent!important;pointer-events:none;--spin:#fff}
+.btn.is-busy{cursor:progress;transform:none;box-shadow:none;color:transparent!important;--spin:#fff}
+.btn[aria-busy=true],a.btn.is-busy{pointer-events:none}
 .btn.is-busy>*{visibility:hidden}
 .btn.is-busy::before{content:'';position:absolute;left:50%;top:50%;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;border:2.5px solid var(--spin);border-right-color:transparent;animation:spin .7s linear infinite;z-index:1}
 .btn-ghost.is-busy,.btn-white.is-busy,.btn-yellow.is-busy,.btn-google.is-busy,.btn-bad.is-busy{--spin:var(--ink)}
@@ -1082,3 +1083,28 @@ body:not([data-ready="1"]) .site-foot,body:not([data-ready="1"]) .up{display:non
 }
 @media (prefers-reduced-motion:reduce){.ld-ring,.ld-ring i,.btn.is-busy::before{animation-duration:3.6s!important;animation-iteration-count:infinite!important}.btn.is-busy::before{animation-duration:1.2s!important}}
 @media print{.side,.app-top,.tabbar,.site-head,.site-foot,.up,#bar{display:none!important}.app{display:block}}
+
+/* ----- Lipa na M-Pesa payment window ----- */
+.mpesa{gap:16px}
+.mp-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px 18px;border-radius:14px;background:var(--green);color:#fff}
+.mp-brand{font-size:15px;font-weight:600;letter-spacing:.02em}.mp-brand b{font-weight:700;letter-spacing:.06em}
+.mp-amt{display:flex;flex-direction:column;align-items:flex-end;line-height:1.15}.mp-amt span{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;opacity:.85}.mp-amt b{font-size:1.45rem;font-variant-numeric:tabular-nums}
+.mp-steps{margin:0;padding:0;list-style:none;counter-reset:mp;display:flex;flex-direction:column;gap:10px;font-size:.92rem;color:var(--ink-2)}
+.mp-steps li{counter-increment:mp;position:relative;padding-left:36px;line-height:1.55;min-height:26px}
+.mp-steps li::before{content:counter(mp);position:absolute;left:0;top:0;width:26px;height:26px;border-radius:50%;background:rgba(61,181,74,.14);color:#238332;font-weight:700;font-size:13px;display:grid;place-items:center}
+.mp-no{display:inline-flex;align-items:center;gap:4px;padding:1px 2px 1px 10px;border-radius:999px;background:var(--soft-2);font-size:1.02rem;letter-spacing:.04em;color:var(--ink);vertical-align:middle}
+.mp-no .icon-btn{width:30px;height:30px}.mp-no .icon-btn .i{width:15px;height:15px}
+.field input.mp-code{font-size:1.25rem!important;font-weight:700;letter-spacing:.22em;text-transform:uppercase;font-variant-numeric:tabular-nums;text-align:center}
+.mp-chip{font-family:ui-monospace,Consolas,monospace;font-size:.82rem;font-weight:700;letter-spacing:.06em;padding:3px 8px;border-radius:6px;background:var(--soft-2);color:var(--ink)}
+.pay-state{align-items:flex-start}
+.pay-state .ps-ic{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;background:var(--ct,var(--soft));color:var(--c)}
+.pay-state .ps-ic .i{width:26px;height:26px}
+/* ----- Revenue ----- */
+.rev-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
+.rk{display:flex;flex-direction:column;gap:6px;padding:20px 20px 18px;border-radius:16px;background:#fff;border:1px solid var(--line);position:relative;overflow:hidden}
+.rk::before{content:'';position:absolute;left:0;top:0;right:0;height:4px;background:var(--c)}
+.rk .l{font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.rk .v{font-size:clamp(1.35rem,2vw,1.8rem);font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+.rk a{color:var(--ink);display:inline-flex;align-items:center;gap:4px}.rk a .i{width:13px;height:13px}
+.trend-up{color:#238332;font-weight:700}.trend-down{color:var(--magenta-d);font-weight:700}
+.field input.mp-code::placeholder{letter-spacing:.04em;text-transform:none;font-weight:500;font-size:1rem}

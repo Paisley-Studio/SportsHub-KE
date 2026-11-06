@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>M-Pesa confirmations | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#FFFAF2">
+<meta name="application-name" content="SportsHub-KE">
+<meta name="apple-mobile-web-app-title" content="SportsHub-KE">
+<meta name="format-detection" content="telephone=no">
+<meta name="geo.region" content="KE">
+<meta name="geo.placename" content="Nairobi, Kenya">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
+<link rel="dns-prefetch" href="https://securetoken.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/config.js">
+<link rel="modulepreload" href="/shared/js/core.js">
+<link rel="modulepreload" href="/shared/js/firebase.js">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="/shared/js/features.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+<script type="speculationrules">{"prerender":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/auth/*","/admin/*","/setup/*","/marketplace/checkout/*","/dashboard/notifications/*","/dashboard/messages/*","/*\\?*page=*"]}},{"not":{"selector_matches":"[data-act], [target], [download], .no-prerender"}}]},"eagerness":"moderate"}],"prefetch":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/admin/*","/setup/*"]}},{"not":{"selector_matches":"[data-act], [target], [download]"}}]},"eagerness":"moderate"}]}</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, money, fmtDT, timeAgo } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { A, route, table, badge, metrics, emptyState, promptForm, confirmBox, fld, run, setQuery, S } from '/shared/js/ui.js';
+import { pageHead, adminPage, adminView } from '/shared/js/features.js';
+
+/* ----- M-Pesa confirmations: match each submitted code against the M-Pesa statement, then approve or reject ----- */
+const TABS = [['waiting', 'Waiting'], ['success', 'Confirmed'], ['rejected', 'Rejected']];
+adminView.payments = async () => {
+  const tab = TABS.some(t => t[0] === S.query.tab) ? S.query.tab : 'waiting';
+  const [waiting, recent] = await Promise.all([
+    db.list('paymentTransactions', { where: [['status', '==', 'awaiting_verification']], orderBy: ['submittedAt', 'asc'], limit: 200 }),
+    db.list('paymentTransactions', { orderBy: ['initiatedAt', 'desc'], limit: 400 })
+  ]);
+  const manual = recent.filter(t => t.provider === 'mpesa_manual');
+  const today = new Date().toISOString().slice(0, 10), confirmedToday = manual.filter(t => t.status === 'success' && (t.completedAt || '').slice(0, 10) === today);
+  const rows = tab === 'waiting' ? waiting : manual.filter(t => t.status === tab);
+  const oldest = waiting[0];
+  return html`${pageHead('M-Pesa confirmations', `Members pay ${S.settings.mpesaNumber || '0720274530'} by Lipa na M-Pesa and enter their code. Match each code on the M-Pesa statement, then confirm to grant access.`, html`<button class="btn btn-ghost" data-act="exportCol" data-col="paymentTransactions">${ic('download')} Export</button>`)}
+    ${metrics([[waiting.length, 'Waiting for you'], [money(waiting.reduce((a, t) => a + t.amount, 0)), 'Value waiting'], [confirmedToday.length, 'Confirmed today'], [oldest ? timeAgo(oldest.submittedAt) : 'None', 'Oldest waiting']])}
+    <div class="tabs mt-lg" role="tablist">${TABS.map(([k, l]) => html`<button role="tab" class="tab ${k === tab ? 'on' : ''}" aria-selected="${k === tab}" data-act="payTab" data-v="${k}">${l}${k === 'waiting' && waiting.length ? html` <span class="n">${waiting.length}</span>` : ''}</button>`)}</div>
+    <div class="mt">${table([
+      { h: 'Submitted', v: t => html`${fmtDT(t.submittedAt || t.initiatedAt)}<br><span class="xs faint">${timeAgo(t.submittedAt || t.initiatedAt)}</span>` },
+      { h: 'Member', v: t => html`<span class="semi">${t.userName}</span><br><span class="xs faint">${t.memberId || ''}${t.payerPhone ? ` · ${t.payerPhone}` : ''}</span>` },
+      { h: 'For', v: t => t.description },
+      { h: 'M-Pesa code', v: t => html`<code class="mp-chip">${t.mpesaCode || '-'}</code>` },
+      { h: 'Amount', right: true, v: t => html`<b>${money(t.amount)}</b>` },
+      { h: 'Status', v: t => html`${badge(t.status)}${t.rejectReason ? html`<br><span class="xs faint">${t.rejectReason}</span>` : ''}` },
+      { h: '', act: true, v: t => t.status === 'awaiting_verification' ? html`<button class="btn btn-sm btn-green" data-act="approvePay" data-id="${t.id}" data-code="${t.mpesaCode}" data-amt="${t.amount}" data-name="${t.userName}">${ic('check')} Confirm</button><button class="btn btn-sm btn-bad" data-act="rejectPay" data-id="${t.id}">Reject</button>` : '' }
+    ], rows, emptyState(tab === 'waiting' ? 'circle-check' : 'receipt', tab === 'waiting' ? 'Nothing waiting' : 'Nothing here yet', tab === 'waiting' ? 'New M-Pesa codes appear here, and you get a notification and email for each one.' : 'Payments appear here once reviewed.'))}</div>`;
+};
+A.payTab = d => setQuery({ tab: d.v === 'waiting' ? '' : d.v });
+A.approvePay = async d => {
+  if (!(await confirmBox('Confirm this payment?', `Only confirm once you have found M-Pesa code ${d.code} for ${money(Number(d.amt))} from ${d.name} on the M-Pesa statement. Access is granted straight away and the member is notified by email.`, 'Payment received', 'btn-green'))) return;
+  await run('paymentReview', { txId: d.id, decision: 'approve' }, 'Payment confirmed. The member has access.').catch(() => {});
+};
+A.rejectPay = async d => {
+  const v = await promptForm({ title: 'Reject this payment', intro: 'The member is told why and can submit the payment again.', fields: fld({ name: 'reason', label: 'Reason the member will see', type: 'textarea', required: true, full: true, value: 'We could not find this M-Pesa code on our statement.' }), submit: 'Reject payment', tone: 'btn-magenta' });
+  if (v) await run('paymentReview', { txId: d.id, decision: 'reject', reason: v.reason }, 'Payment rejected. The member has been told.').catch(() => {});
+};
+route('/admin/payments', adminPage('payments'), { shell: 'app', auth: true, admin: true, title: 'M-Pesa confirmations' });
+</script>
+</body>
+</html>

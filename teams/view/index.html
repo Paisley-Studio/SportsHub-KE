@@ -3,24 +3,46 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>SportsHub-KE | One platform. Every sport. Every player.</title>
-<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<title>Team | SportsHub-KE</title>
+<meta name="description" content="Team profile, squad, fixtures and results on SportsHub-KE.">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
 <meta name="theme-color" content="#FFFAF2">
+<meta name="application-name" content="SportsHub-KE">
+<meta name="apple-mobile-web-app-title" content="SportsHub-KE">
+<meta name="format-detection" content="telephone=no">
+<meta name="geo.region" content="KE">
+<meta name="geo.placename" content="Nairobi, Kenya">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="SportsHub-KE">
-<meta property="og:title" content="SportsHub-KE | One platform. Every sport. Every player.">
-<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
-<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta property="og:locale" content="en_KE">
+<meta property="og:title" content="Team | SportsHub-KE">
+<meta property="og:description" content="Team profile, squad, fixtures and results on SportsHub-KE.">
+<meta property="og:url" content="https://sportshub.co.ke/teams/view/">
+<meta property="og:image" content="https://sportshub.co.ke/assets/photos/rugby-kenya.webp">
+<meta property="og:image:alt" content="Team | SportsHub-KE">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Team | SportsHub-KE">
+<meta name="twitter:description" content="Team profile, squad, fixtures and results on SportsHub-KE.">
+<meta name="twitter:image" content="https://sportshub.co.ke/assets/photos/rugby-kenya.webp">
 <link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
+<link rel="dns-prefetch" href="https://securetoken.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/config.js">
+<link rel="modulepreload" href="/shared/js/core.js">
+<link rel="modulepreload" href="/shared/js/firebase.js">
 <link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="/shared/js/features.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+<script type="speculationrules">{"prerender":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/auth/*","/admin/*","/setup/*","/marketplace/checkout/*","/dashboard/notifications/*","/dashboard/messages/*","/*\\?*page=*"]}},{"not":{"selector_matches":"[data-act], [target], [download], .no-prerender"}}]},"eagerness":"moderate"}],"prefetch":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/admin/*","/setup/*"]}},{"not":{"selector_matches":"[data-act], [target], [download]"}}]},"eagerness":"moderate"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://sportshub.co.ke/"},{"@type":"ListItem","position":2,"name":"Teams","item":"https://sportshub.co.ke/teams/view/"}]},{"@type":"WebPage","name":"Team | SportsHub-KE","description":"Team profile, squad, fixtures and results on SportsHub-KE.","url":"https://sportshub.co.ke/teams/view/","isPartOf":{"@id":"https://sportshub.co.ke/#site"},"inLanguage":"en-KE"}]}</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -43,6 +65,9 @@ route('/teams/:id', async ({ id }) => {
   const t = await db.get('teams', id);
   if (!t) return notFound();
   S.pageTitle = t.name;
+  S.pageDesc = `${t.name}: ${t.sportName || 'sports'} team in ${[t.town, t.county].filter(Boolean).join(', ') || 'Kenya'}. ${t.memberCount || 0} players.${t.recruiting ? ' Recruiting now.' : ''} ${String(t.description || '').slice(0, 80)}`;
+  S.pageImage = t.logo;
+  S.pageLd = { '@type': 'SportsTeam', name: t.name, sport: t.sportName || '', description: t.description || '', ...(t.logo ? { logo: new URL(t.logo, location.href).href } : {}), location: { '@type': 'Place', address: { '@type': 'PostalAddress', addressLocality: t.town || '', addressRegion: t.county || '', addressCountry: 'KE' } }, url: location.href };
   const members = S.uid ? (await db.list('teamMembers', { where: [['teamId', '==', id], ['status', '==', 'active']], limit: 80 })) : [];
   const mine = S.uid ? await db.get('teamMembers', `${id}_${S.uid}`) : null;
   const fixtures = await db.list('fixtures', { where: [['teamIds', 'array-contains', id]], orderBy: ['start', 'desc'], limit: 12 });

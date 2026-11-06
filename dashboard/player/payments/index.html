@@ -5,22 +5,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Payments | SportsHub-KE</title>
 <meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#FFFAF2">
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="SportsHub-KE">
-<meta property="og:title" content="Payments | SportsHub-KE">
-<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
-<meta property="og:image" content="/assets/photos/brand-banner.webp">
-<meta name="twitter:card" content="summary_large_image">
+<meta name="application-name" content="SportsHub-KE">
+<meta name="apple-mobile-web-app-title" content="SportsHub-KE">
+<meta name="format-detection" content="telephone=no">
+<meta name="geo.region" content="KE">
+<meta name="geo.placename" content="Nairobi, Kenya">
 <link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
+<link rel="dns-prefetch" href="https://securetoken.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/config.js">
+<link rel="modulepreload" href="/shared/js/core.js">
+<link rel="modulepreload" href="/shared/js/firebase.js">
 <link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="/shared/js/features.js">
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+<script type="speculationrules">{"prerender":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/auth/*","/admin/*","/setup/*","/marketplace/checkout/*","/dashboard/notifications/*","/dashboard/messages/*","/*\\?*page=*"]}},{"not":{"selector_matches":"[data-act], [target], [download], .no-prerender"}}]},"eagerness":"moderate"}],"prefetch":[{"where":{"and":[{"href_matches":"/*"},{"not":{"href_matches":["/admin/*","/setup/*"]}},{"not":{"selector_matches":"[data-act], [target], [download]"}}]},"eagerness":"moderate"}]}</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -32,15 +41,35 @@
 <script type="module">
 import { html, ic, money, fmtDT } from '/shared/js/core.js';
 import { db } from '/shared/js/firebase.js';
-import { page, S, A, badge, emptyState, table, openModal } from '/shared/js/ui.js';
-import { receiptHtml, appRoute, pageHead } from '/shared/js/features.js';
+import { page, S, A, badge, emptyState, table, openModal, metrics, renderMain, refreshSession, toast } from '/shared/js/ui.js';
+import { receiptHtml, appRoute, pageHead, paymentFlow } from '/shared/js/features.js';
 
+/* ----- Payment records: every registration, membership and marketplace payment, with receipts ----- */
+const STATUS_NOTE = { awaiting_verification: 'We are confirming your M-Pesa code.', rejected: 'Not confirmed.', pending: 'Not finished.' };
 A.viewReceipt = async d => { const t = await db.get('paymentTransactions', d.id); openModal({ title: 'Payment receipt', body: html`${t.simulated ? html`<div class="notice c-yellow small mb">Simulated transaction. Not a real payment.</div>` : ''}${receiptHtml(t)}`, foot: html`<button class="btn btn-ghost" data-act="printReceipt">${ic('printer')} Print</button><button class="btn" data-act="closeModal">Close</button>` }).then(() => {}); };
+/* A payment opened but never finished can be completed later with its M-Pesa code. */
+A.finishPayment = async d => {
+  const t = await db.get('paymentTransactions', d.id); if (!t) return;
+  const outcome = await paymentFlow({ txId: t.id, amount: t.amount, description: t.description });
+  if (outcome === 'submitted') toast('Payment submitted. We will confirm it and let you know.', 'blue');
+  await refreshSession(); renderMain();
+};
 appRoute('/app/payments', async () => {
-  const rows = await db.list('paymentTransactions', { where: [['uid', '==', S.uid]], orderBy: ['initiatedAt', 'desc'], limit: 40 });
-  return page(pageHead('Payments', 'All registration, membership and marketplace payments.'),
-    '',
-    table([{ h: 'Date', v: t => fmtDT(t.initiatedAt) }, { h: 'Description', v: t => html`${t.description}${t.simulated ? html` <span class="tag sim">Simulated</span>` : ''}` }, { h: 'Reference', v: t => t.ref }, { h: 'Amount', right: true, v: t => money(t.amount) }, { h: 'Status', v: t => badge(t.status) }, { h: '', act: true, v: t => html`${t.status === 'success' ? html`<button class="btn btn-sm btn-ghost" data-act="viewReceipt" data-id="${t.id}">Receipt</button>` : ''}${false ? html`<button class="btn btn-sm btn-ghost" data-act="replayCallback" data-id="${t.id}" title="Send the same payment callback again to prove it is ignored">Replay callback</button>` : ''}` }], rows, emptyState('receipt', 'No payments yet', 'Your receipts will appear here.')));
+  const rows = await db.list('paymentTransactions', { where: [['uid', '==', S.uid]], orderBy: ['initiatedAt', 'desc'], limit: 60 });
+  const ok = rows.filter(t => t.status === 'success'), waiting = rows.filter(t => t.status === 'awaiting_verification');
+  const last = ok[0];
+  return page(pageHead('Payments', 'Your registration, membership and marketplace payments, with receipts.'),
+    rows.length ? metrics([[money(ok.reduce((a, t) => a + t.amount, 0)), 'Total paid'], [ok.length, 'Confirmed payments'], [waiting.length, 'Being confirmed'], [last ? fmtDT(last.completedAt).split(',')[0] : 'None', 'Last payment']]) : '',
+    waiting.length ? html`<div class="notice c-blue small mt">${ic('hourglass')} ${waiting.length === 1 ? 'One payment is' : `${waiting.length} payments are`} being confirmed. You will get a notification and an email as soon as it is done.</div>` : '',
+    html`<div class="mt-lg"></div>`,
+    table([
+      { h: 'Date', v: t => fmtDT(t.completedAt || t.submittedAt || t.initiatedAt) },
+      { h: 'Description', v: t => html`${t.description}${t.simulated ? html` <span class="tag sim">Simulated</span>` : ''}` },
+      { h: 'M-Pesa code', v: t => t.mpesaCode ? html`<code class="mp-chip">${t.mpesaCode}</code>` : html`<span class="faint">-</span>` },
+      { h: 'Amount', right: true, v: t => html`<b>${money(t.amount)}</b>` },
+      { h: 'Status', v: t => html`${badge(t.status === 'awaiting_verification' ? 'awaiting_verification' : t.status)}${STATUS_NOTE[t.status] || t.rejectReason ? html`<br><span class="xs faint">${t.rejectReason || STATUS_NOTE[t.status]}</span>` : ''}` },
+      { h: '', act: true, v: t => t.status === 'success' || t.status === 'refunded' ? html`<button class="btn btn-sm btn-ghost" data-act="viewReceipt" data-id="${t.id}">${ic('receipt')} Receipt</button>` : t.status === 'pending' && t.provider === 'mpesa_manual' ? html`<button class="btn btn-sm btn-green" data-act="finishPayment" data-id="${t.id}">Enter M-Pesa code</button>` : '' }
+    ], rows, emptyState('receipt', 'No payments yet', 'Your receipts will appear here.')));
 }, 'Payments');
 </script>
 </body>

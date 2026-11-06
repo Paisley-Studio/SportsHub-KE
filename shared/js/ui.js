@@ -530,7 +530,7 @@ export const drawShell = () => {
     main.classList.add('app-page');
     const wrap = document.createElement('div');
     wrap.className = `app c-${c} ${S.activeRole === 'admin' ? 'is-admin' : ''}`;
-    wrap.innerHTML = html`<aside class="side" aria-label="Dashboard navigation">${logo()}
+    wrap.innerHTML = html`<aside class="side" aria-label="Dashboard navigation">${logo('#/', 'dark')}
         ${avail.length > 1 ? html`<div class="role-switch"><label for="role-sw">Viewing as</label><select id="role-sw" data-change="switchRole">${avail.map(r => opt(r, ROLE_LABEL[r] || r, S.activeRole))}</select></div>` : html`<div class="role-switch"><label>Account</label><span class="strong small">${ROLE_LABEL[S.activeRole] || 'Member'}</span></div>`}
         ${nav.map(g => html`<nav class="side-group" aria-label="${g.title || 'Main'}">${g.title ? html`<h6>${g.title}</h6>` : ''}${g.items.map(([href, icon, label, n]) => html`<a class="side-link" href="#${href}">${ic(icon)}<span>${label}</span>${n ? raw(`<span class="n" data-count="${esc(n)}"></span>`) : ''}</a>`)}</nav>`)}</aside>
       <div class="app-main"><header class="app-top">${searchBox()}<div style="flex:1"></div>${accountActions()}</header><div id="main-host"></div></div>

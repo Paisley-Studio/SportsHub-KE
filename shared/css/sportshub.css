@@ -1111,3 +1111,72 @@ body:not([data-ready="1"]) .site-foot,body:not([data-ready="1"]) .up{display:non
 /* ----- Password reset finished ----- */
 .reset-done .rd-ic{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;background:var(--green-t);color:var(--green)}
 .reset-done .rd-ic .i{width:28px;height:28px}
+
+/* ==========================================================================
+   DASHBOARD COLOUR (every role, admin included)
+   A black sidebar with coloured icons, a soft blue-tinted page, metric cards in the
+   four theme colours, tinted table heads and coloured panel accents. Black is used
+   for the sidebar only. No gradients.
+   ========================================================================== */
+.app{--app-bg:#F1F8FC;background:var(--app-bg)}
+.app-top{background:rgba(241,248,252,.92);border-bottom-color:#DCEBF3}
+/* Sidebar */
+.app .side{background:var(--bk);border-right:3px solid var(--c);color:#B9BDC6;scrollbar-color:var(--bk-4) transparent}
+.app .side .side-group h6{color:#6F7480}
+.app .side .side-link{color:#C3C6CD}
+.app .side .side-link svg{color:var(--gi,var(--blue))}
+.app .side .side-group:nth-of-type(4n+1){--gi:var(--blue)}.app .side .side-group:nth-of-type(4n+2){--gi:var(--magenta)}
+.app .side .side-group:nth-of-type(4n+3){--gi:var(--green)}.app .side .side-group:nth-of-type(4n+4){--gi:var(--yellow)}
+.app .side .side-link:hover{background:rgba(255,255,255,.07);color:#fff}
+.app .side .side-link.on{background:rgba(255,255,255,.1);color:#fff}
+.app .side .side-link.on svg{color:var(--gi,var(--c))}
+.app .side .side-link.on::before{background:var(--gi,var(--c));left:-14px}
+.app .side .role-switch{border-color:var(--bk-3);background:var(--bk-2)}
+.app .side .role-switch label{color:#8E929B}
+.app .side .role-switch select,.app .side .role-switch .strong{color:#fff}
+.app .side .role-switch option{color:var(--ink);background:#fff}
+/* Page header and dashboard welcome */
+.app .dash-hero{background:var(--ct);border:1px solid color-mix(in srgb,var(--c) 22%,#fff);border-left:6px solid var(--c);border-radius:20px;padding:26px 28px;margin-bottom:28px}
+.app .page-head{background:#fff;border:1px solid #DCEBF3;border-left:6px solid var(--c);border-radius:18px;padding:22px 24px;margin-bottom:28px}
+/* Figures: one card per number, cycling blue, magenta, green, yellow. */
+.app .page .metrics{border:0;gap:14px;margin:4px 0 22px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.app .page .metric{--mc:var(--blue);--mt:var(--blue-t);--md:var(--blue-d);background:#fff;border:1px solid #DCEBF3;border-radius:16px;padding:18px 20px 16px 22px;overflow:hidden;transition:transform var(--fast),box-shadow var(--fast),border-color var(--fast)}
+.app .page .metric+.metric{padding-left:22px;border-left:1px solid #DCEBF3}
+.app .page .metric:nth-child(4n+2){--mc:var(--magenta);--mt:var(--magenta-t);--md:var(--magenta-d)}
+.app .page .metric:nth-child(4n+3){--mc:var(--green);--mt:var(--green-t);--md:var(--green-d)}
+.app .page .metric:nth-child(4n+4){--mc:var(--yellow);--mt:var(--yellow-t);--md:var(--yellow-d)}
+.app .page .metric::before{content:'';position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--mc)}
+.app .page .metric::after{content:'';position:absolute;right:-18px;top:-18px;width:64px;height:64px;border-radius:18px;background:var(--mt);transform:rotate(18deg)}
+.app .page .metric .v{color:var(--md);position:relative;z-index:1}
+.app .page .metric .l{color:var(--ink-2);position:relative;z-index:1}
+.app .page .metric:hover{transform:translateY(-3px);border-color:var(--mc);box-shadow:0 14px 28px -18px color-mix(in srgb,var(--mc) 70%,transparent)}
+/* Panels: white on the tinted page, each with its own colour accent. */
+.app .panel{border-color:#DCEBF3;--pc:var(--blue)}
+.app .panel:nth-of-type(4n+2){--pc:var(--magenta)}.app .panel:nth-of-type(4n+3){--pc:var(--green)}.app .panel:nth-of-type(4n+4){--pc:var(--yellow)}
+.app .panel{border-top:4px solid var(--pc)}
+.app .panel-head h3{display:flex;align-items:center;gap:10px}
+.app .panel-head h3::before{content:'';width:10px;height:10px;border-radius:3px;background:var(--pc);flex:none}
+/* Tables: tinted heads, coloured hover. */
+.app .tbl th{background:var(--blue-t);color:var(--blue-d);border-bottom:0}
+.app .tbl th:first-child{border-radius:10px 0 0 10px}.app .tbl th:last-child{border-radius:0 10px 10px 0}
+.app .panel .tbl th:first-child,.app .panel .tbl td:first-child{padding-left:14px}.app .panel .tbl th:last-child,.app .panel .tbl td:last-child{padding-right:14px}
+.app .tbl tbody tr:hover{background:#F4FAFD}
+.app .page>.tbl-wrap,.app .page>div>.tbl-wrap{background:#fff;border:1px solid #DCEBF3;border-radius:16px;padding:8px}
+/* Tabs: the chosen one is filled with the section colour. */
+.app .tabs{background:#fff;border:1px solid #DCEBF3}
+.app .tab.on{background:var(--c);color:var(--con);box-shadow:none}
+/* Empty states and next steps stand out on the tinted page. */
+.app .empty{background:#fff;border-color:#CFE3EE}
+.app .empty svg{color:var(--c)}
+.app .next-step{border-color:#DCEBF3}
+/* Admin decision queue: every row carries a colour; rows with work waiting light up. */
+.app .queue{border-color:#DCEBF3}
+.app .qi{--qc:var(--blue);--qt:var(--blue-t);--qd:var(--blue-d);border-left:5px solid var(--qc)}
+.app .qi:nth-child(4n+2){--qc:var(--magenta);--qt:var(--magenta-t);--qd:var(--magenta-d)}
+.app .qi:nth-child(4n+3){--qc:var(--green);--qt:var(--green-t);--qd:var(--green-d)}
+.app .qi:nth-child(4n+4){--qc:var(--yellow);--qt:var(--yellow-t);--qd:var(--yellow-d)}
+.app .qi:hover{background:var(--qt)}
+.app .qi .q-n{min-width:42px;height:34px;padding:0 10px;border-radius:10px;display:inline-grid;place-items:center;background:var(--qt);color:var(--qd)}
+.app .qi.zero{opacity:1}.app .qi.zero .q-t{color:var(--ink-2)}.app .qi.zero .q-n{color:var(--qd);opacity:.6}
+.app .qi.hot{background:var(--qt)}.app .qi.hot .q-n{background:var(--qc);color:#fff}
+.app .qi svg.i{color:var(--qc)}

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Platform setup | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Platform setup | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { img, html, SPORTS_CATALOGUE } from '/shared/js/core.js';
+import { db, callOp } from '/shared/js/firebase.js';
+import { S, A, toast, go, route, refreshSession } from '/shared/js/ui.js';
+
+A.runBootstrap = async () => {
+  const r = await callOp('bootstrapPlatform', { sports: SPORTS_CATALOGUE.map(s => ({ ...s, photo: s.photo ? img(s.photo) : '' })) });
+  S.sports = await db.list('sports', { limit: 100 }); await refreshSession();
+  toast(`Setup complete. ${r.sports} sports loaded.`, 'green'); go('/admin');
+};
+/* ----- First-run setup for a new production project ----- */
+route('/setup', async () => {
+  
+  if (!S.uid) { S.afterLogin = '/setup'; go('/signin', true); return undefined; }
+  return html`<div class="wrap section" style="max-width:640px"><h1 class="mb">Platform setup</h1><p class="muted mb">Loads the sports catalogue and default settings, and makes you Super Administrator. It works only for the account whose email matches SUPERADMIN_EMAIL on the server.</p><button class="btn" data-act="runBootstrap">Run setup</button></div>`;
+}, { title: 'Platform setup' });
+</script>
+</body>
+</html>

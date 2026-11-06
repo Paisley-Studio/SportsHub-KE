@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Advertising management | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Advertising management | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { AD_PLACEMENTS, html, money, compact, fmtDate } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { A, badge, metrics, table, fld, promptForm, run, route, hbars } from '/shared/js/ui.js';
+import { pageHead, adminPage, adminView } from '/shared/js/features.js';
+
+/* ----- Commercial ----- */
+adminView.ads = async () => {
+  const rows = await db.list('advertisingCampaigns', { limit: 100 });
+  rows.sort((a, b) => (a.status === 'submitted' ? -1 : 1) - (b.status === 'submitted' ? -1 : 1));
+  const act = rows.filter(a => a.status === 'active'), imp = rows.reduce((a, c) => a + (c.impressions || 0), 0), clk = rows.reduce((a, c) => a + (c.clicks || 0), 0);
+  const byP = {}; rows.forEach(c => Object.entries(c.byPlacement || {}).forEach(([k, v]) => { byP[k] = (byP[k] || 0) + v.impressions; }));
+  return html`${pageHead('Advertising management', 'All advertising is reviewed. It never interrupts booking or other critical flows.')}${metrics([[act.length, 'Active campaigns'], [rows.filter(a => a.status === 'submitted').length, 'To review'], [compact(imp), 'Impressions'], [imp ? `${(clk / imp * 100).toFixed(1)}%` : '0%', 'Click-through'], [money(rows.reduce((a, c) => a + (c.bookedRevenue || 0), 0)), 'Booked revenue']])}
+   <div class="mt-lg"></div>${table([{ h: 'Campaign', v: a => html`<span class="semi">${a.title}</span><br><span class="xs faint">${a.business}</span>` }, { h: 'Dates', v: a => `${fmtDate(a.start)} to ${fmtDate(a.end)}` }, { h: 'Budget', right: true, v: a => money(a.budget) }, { h: 'Impressions', right: true, v: a => compact(a.impressions) }, { h: 'CTR', right: true, v: a => a.impressions ? `${(a.clicks / a.impressions * 100).toFixed(1)}%` : '' }, { h: 'Status', v: a => badge(a.status) }, { h: '', act: true, v: a => html`<button class="btn btn-sm ${a.status === 'submitted' ? '' : 'btn-ghost'}" data-act="reviewCampaign" data-id="${a.id}">${a.status === 'submitted' ? 'Review' : 'Manage'}</button>` }], rows)}
+   <section class="panel mt-lg"><h3 class="mb">Impressions by placement</h3>${hbars(Object.entries(byP).map(([k, v]) => [AD_PLACEMENTS[k] || k, v]).sort((a, b) => b[1] - a[1]), 'var(--magenta)', compact)}</section>`;
+};
+A.reviewCampaign = async d => {
+  const a = await db.get('advertisingCampaigns', d.id);
+  const v = await promptForm({ title: `Review: ${a.title}`, wide: true, intro: html`<dl class="kv small"><dt>Business</dt><dd>${a.business}</dd><dt>Message</dt><dd>${a.description}</dd><dt>Destination</dt><dd>${a.destination}</dd><dt>Audience</dt><dd>${a.audience}</dd></dl>${a.creative ? html`<img src="${a.creative}" alt="Campaign artwork" style="max-height:160px;margin-top:10px">` : ''}`, fields: html`${fld({ name: 'decision', label: 'Status', type: 'select', value: 'approved', required: true, options: [['pending', 'Pending approval'], ['approved', 'Approve (goes active on start date)'], ['paused', 'Pause'], ['completed', 'Complete'], ['rejected', 'Reject']], full: true })}${fld({ name: 'placements', label: 'Approved placements', type: 'checks', value: a.approvedPlacements && a.approvedPlacements.length ? a.approvedPlacements : a.placements, options: Object.entries(AD_PLACEMENTS), full: true })}${fld({ name: 'note', label: 'Note to advertiser', type: 'textarea', full: true })}`, submit: 'Save decision' });
+  if (v) await run('reviewCampaign', { id: d.id, ...v }, 'Campaign updated.').catch(() => {});
+};
+route('/admin/ads', adminPage('ads'), { shell: 'app', auth: true, admin: true, title: "Advertising management" });
+</script>
+</body>
+</html>

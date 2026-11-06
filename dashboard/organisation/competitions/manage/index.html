@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Manage competition | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Manage competition | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, raw, ic, money, titleCase, fmtDate, fmtDT } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, canAdmin, A, badge, table, opt, fld, promptForm, run, notFound } from '/shared/js/ui.js';
+import { appRoute, pageHead } from '/shared/js/features.js';
+
+A.tournamentStatus = (d, el) => run('setTournamentStatus', { id: d.id, status: el.value }, 'Status updated.').catch(() => {});
+A.genFixtures = d => run('generateFixtures', { id: d.id }, 'Fixtures generated.').catch(() => {});
+A.addOfficial = async d => { const v = await promptForm({ title: 'Add a referee or official', fields: html`${fld({ name: 'name', label: 'Name', required: true })}${fld({ name: 'role', label: 'Role', value: 'Referee', required: true })}${fld({ name: 'memberId', label: 'SportsHub ID, optional', hint: 'Linked officials can record results.', full: true })}`, submit: 'Add official' }); if (v) await run('addTournamentOfficial', { id: d.id, ...v }, 'Official added.').catch(() => {}); };
+A.publishWinner = async d => { const v = await promptForm({ title: 'Publish winner', fields: fld({ name: 'winner', label: 'Winner', required: true, full: true }), submit: 'Publish', tone: 'btn-yellow' }); if (v) await run('publishWinner', { id: d.id, winner: v.winner }, 'Winner published.').catch(() => {}); };
+appRoute('/app/org/competitions/:id', async ({ id }) => {
+  const t = await db.get('tournaments', id);
+  if (!t || (t.organiserId !== S.uid && !canAdmin('tournaments'))) return notFound();
+  const [regs, fx] = await Promise.all([db.list('tournamentRegistrations', { where: [['tournamentId', '==', id]], limit: 200 }), db.list('fixtures', { where: [['tournamentId', '==', id]], limit: 300 })]);
+  S.pageTitle = t.name;
+  const confirmed = regs.filter(r => r.status === 'confirmed').length, open = fx.filter(f => f.status === 'scheduled');
+  return page(pageHead(t.name, `${t.sportName} · ${titleCase(t.format)} · ${fmtDate(t.start)}`, html`<a class="btn btn-ghost" href="#/tournaments/${id}">Public page</a>`),
+    html`<div class="row mb">${badge(t.status)}<div class="field" style="max-width:220px"><label for="tst" class="sr">Status</label><select id="tst" data-change="tournamentStatus" data-id="${id}">${['open', 'closed', 'running', 'finished', 'cancelled'].map(s => opt(s, titleCase(s), t.status))}</select></div>
+      ${t.format !== 'individual' && !fx.length ? html`<button class="btn btn-yellow" data-act="genFixtures" data-id="${id}" ${confirmed < 2 ? raw('disabled') : ''}>Generate fixtures (${confirmed} confirmed)</button>` : ''}
+      ${t.format === 'individual' ? html`<button class="btn btn-yellow" data-act="addIndividualResult" data-id="${id}">Record a result</button>` : ''}
+      <button class="btn btn-ghost" data-act="addOfficial" data-id="${id}">${ic('user-plus')} Add official</button><button class="btn btn-ghost" data-act="publishWinner" data-id="${id}">${ic('trophy')} Publish winner</button></div>`,
+    html`<div class="grid g2"><section class="panel"><h3 class="mb">Registrations</h3>${table([{ h: 'Entrant', v: r => html`<span class="semi">${r.entrantName}</span>` }, { h: 'Fee', right: true, v: r => money(r.feeDue) }, { h: 'Status', v: r => badge(r.status) }, { h: '', act: true, v: r => r.status === 'pending' ? html`<button class="btn btn-sm btn-yellow" data-act="reviewEntry" data-id="${r.id}" data-v="1">Confirm</button><button class="btn btn-sm btn-ghost" data-act="reviewEntry" data-id="${r.id}" data-v="">Decline</button>` : '' }], regs, html`<p class="small muted">No entries yet.</p>`)}</section>
+    <section class="panel"><h3 class="mb">Fixtures to play (${open.length})</h3>${open.length ? html`<div class="lines">${open.slice(0, 20).map(f => html`<div class="row between"><span class="small"><b>${f.homeName} v ${f.awayName}</b><br><span class="faint">${f.roundLabel}, ${fmtDT(f.start)}</span></span><button class="btn btn-sm btn-ghost" data-act="recordScore" data-id="${f.id}" data-h="${f.homeName}" data-a="${f.awayName}">Result</button></div>`)}</div>` : html`<p class="small muted">${fx.length ? 'All results are in.' : 'Fixtures appear here once generated.'}</p>`}
+      ${(t.officials || []).length ? html`<h4 class="mt mb">Officials</h4><ul class="small muted">${t.officials.map(o => html`<li>${o.name}, ${o.role}</li>`)}</ul>` : ''}</section></div>`);
+}, 'Manage competition');
+</script>
+</body>
+</html>

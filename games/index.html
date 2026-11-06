@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Games near you | SportsHub-KE</title>
+<meta name="description" content="Open football, basketball, athletics and other games near you.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Games near you | SportsHub-KE">
+<meta property="og:description" content="Open football, basketball, athletics and other games near you.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { COUNTY_NAMES, SKILLS, html, raw, ic, $, fmt, fmtTime, fmtDT, dayKey, zonedISO, haversine, countyLatLng, slotOf, scoreGame } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { S, SPORT, sportC, A, onMount, onLeave, showErr, emptyState, toUrl, setQuery, renderMain, route, adSlot, pgHero } from '/shared/js/ui.js';
+import { qUpcoming, spacesLeft, filterSelect, gameCard, filterText } from '/shared/js/features.js';
+
+/* ----- Games ----- */
+const inWhen = (g, w, date) => {
+  const d = dayKey(g.start), today = dayKey(new Date());
+  if (date) return d === date;
+  if (w === 'today') return d === today;
+  if (w === 'week') return new Date(g.start).getTime() < Date.now() + 7 * 864e5;
+  if (w === 'weekend') { const wd = new Date(new Date(g.start).getTime() + 3 * 36e5).getUTCDay(); return (wd === 0 || wd === 6) && new Date(g.start).getTime() < Date.now() + 7 * 864e5; }
+  return true;
+};
+A.moreGames = () => { S.ui.gamesLimit = (S.ui.gamesLimit || 40) + 40; renderMain(); };
+A.gamesView = d => setQuery({ view: d.v === 'list' ? '' : d.v });
+const gameCalendar = rows => {
+  const todayKey = dayKey(new Date()), ym = S.query.m || todayKey.slice(0, 7), [y, m] = ym.split('-').map(Number), first = new Date(Date.UTC(y, m - 1, 1)), off = (first.getUTCDay() + 6) % 7, days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const by = {}; rows.forEach(g => { (by[dayKey(g.start)] = by[dayKey(g.start)] || []).push(g); });
+  const cells = []; for (let i = 0; i < off; i++) cells.push(html`<div class="cal-d off" aria-hidden="true"></div>`);
+  for (let d = 1; d <= days; d++) { const k = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`, list = by[k] || []; cells.push(html`<div class="cal-d ${k === todayKey ? 'today' : ''}"><span class="dn">${d}</span>${list.slice(0, 4).map(g => html`<a class="cal-e ${sportC(g.sportId)}" href="#/games/${g.id}" title="${g.title}">${fmtTime(g.start)} ${g.title}</a>`)}${list.length > 4 ? html`<span class="xs faint">+${list.length - 4} more</span>` : ''}</div>`); }
+  const prev = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7), next = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 7);
+  return html`<div class="row between mb mt"><button class="icon-btn" data-act="gamesMonth" data-v="${prev}" aria-label="Previous month">${ic('chevron-left')}</button><h3>${fmt(zonedISO(`${ym}-15`, '12:00'), { month: 'long', year: 'numeric' })}</h3><button class="icon-btn" data-act="gamesMonth" data-v="${next}" aria-label="Next month">${ic('chevron-right')}</button></div><div class="cal">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => html`<div class="cal-h">${d}</div>`)}${cells}</div>`;
+};
+A.gamesMonth = d => setQuery({ m: d.v });
+/* Leaflet loads only when someone opens the map. */
+const loadLeaflet = () => new Promise((res, rej) => {
+  if (window.L) return res(window.L);
+  const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.append(css);
+  const js = document.createElement('script'); js.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; js.onload = () => res(window.L); js.onerror = () => rej(new Error('The map could not load. Check your connection.')); document.head.append(js);
+});
+const drawGameMap = async rows => {
+  try {
+    const L = await loadLeaflet(), box = $('#game-map'); if (!box) return;
+    const map = L.map(box, { scrollWheelZoom: false }), pts = [];
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+    rows.forEach((g, i) => {
+      const ll = g.lat || g.lng ? [g.lat, g.lng] : (() => { const c = countyLatLng(g.county); return [c.lat, c.lng]; })(), p = [ll[0] + (i % 5) * .002, ll[1] + (i % 7) * .002];
+      pts.push(p);
+      L.marker(p, { icon: L.divIcon({ className: '', html: `<div class="map-pin ${sportC(g.sportId)}"></div>`, iconSize: [18, 18] }) }).addTo(map).bindPopup(html`<b>${g.title}</b><br>${fmtDT(g.start)}<br>${spacesLeft(g)} places left<br><a href="${toUrl(`/games/${g.id}`)}">View game</a>`.s);
+    });
+    map.fitBounds(pts, { padding: [40, 40], maxZoom: 13 });
+    onLeave(() => map.remove());
+  } catch (e) { showErr(e); }
+};
+/* ----- Game discovery with list, map and calendar views ----- */
+route('/games', async () => {
+  const q = S.query, extra = [];
+  if (q.sport) extra.push(['sportId', '==', q.sport]);
+  if (q.county) extra.push(['county', '==', q.county]);
+  const limit = Number(S.ui.gamesLimit || 60);
+  let rows = await db.list('games', qUpcoming(extra, limit));
+  const fetched = rows.length, prof = S.profile, ad = await adSlot('game_discovery'), view = q.view || 'list';
+  rows = rows.filter(g => inWhen(g, q.when, q.date) && (!q.skill || g.skill === q.skill || g.skill === 'All levels') && (!q.format || g.format === q.format) && (!q.spaces || spacesLeft(g) > 0) && (!q.fee || (q.fee === 'free' ? !g.fee : g.fee > 0)) && (!q.time || slotOf(g.start).includes(q.time)) && (!q.covered || g.covered) && (!q.venue || (g.venueName || '').toLowerCase().includes(q.venue.toLowerCase())) && (!q.town || (g.town || '').toLowerCase().includes(q.town.toLowerCase())));
+  if (q.dist && S.origin) rows = rows.filter(g => { const dist = haversine(S.origin.lat, S.origin.lng, g.lat, g.lng); return dist === null || dist <= Number(q.dist); });
+  if (prof) rows.sort((a, b) => scoreGame(b, prof, S.origin).score - scoreGame(a, prof, S.origin).score);
+  const formats = q.sport ? SPORT(q.sport).formats : [], active = Object.keys(q).filter(k => q[k] && !['sort', 'view'].includes(k)).length;
+  if (view === 'map') onMount(() => drawGameMap(rows));
+  return html`${pgHero({ c: 'blue', c2: 'yellow', eye: 'Find games', title: 'Games near you', lede: prof ? `Ranked using your sports, ${prof.county}, your availability and your level.` : 'Sign in to rank games by distance, sport, availability and level.', cut: 'footballer', action: html`<a class="btn btn-blue" href="#/app/games/new">${ic('plus')} Create a game</a>` })}
+  <div class="wrap section tight">
+    <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px" role="group" aria-label="Game filters">
+      ${filterSelect('sport', 'Sport', q.sport, S.sports.map(s => [s.id, s.name]), 'Every sport')}${filterSelect('county', 'County', q.county, COUNTY_NAMES, 'All counties')}${filterText('town', 'Town', q.town)}
+      ${filterSelect('when', 'When', q.when, [['today', 'Today'], ['weekend', 'This weekend'], ['week', 'Next 7 days']], 'Any time')}
+      <div class="field"><label for="ff-date">Date</label><input id="ff-date" type="date" name="date" value="${q.date || ''}" data-filter></div>
+      ${filterSelect('time', 'Time of day', q.time, [['mornings', 'Morning'], ['afternoons', 'Afternoon'], ['evenings', 'Evening']], 'Any time')}${filterSelect('skill', 'Skill', q.skill, SKILLS, 'Any level')}${filterSelect('format', 'Format', q.format, formats, q.sport ? 'Any format' : 'Pick a sport first')}${filterText('venue', 'Venue', q.venue)}
+      ${filterSelect('dist', 'Distance', q.dist, [['5', 'Within 5 km'], ['10', 'Within 10 km'], ['25', 'Within 25 km'], ['50', 'Within 50 km'], ['100', 'Within 100 km']], 'Any distance')}${filterSelect('fee', 'Price', q.fee, [['free', 'No fee'], ['paid', 'With fee']], 'Any price')}
+    </div>
+    <div class="row between mb"><div class="row">
+      <label class="tick"><input type="checkbox" name="spaces" data-filter ${q.spaces ? raw('checked') : ''}><span>Places available</span></label>
+      <label class="tick"><input type="checkbox" name="covered" data-filter ${q.covered ? raw('checked') : ''}><span>Covered by membership</span></label>
+      ${active ? html`<button class="btn btn-ghost btn-sm" data-act="clearFilters">Clear filters</button>` : ''}</div>
+      <div class="row"><span class="small muted" aria-live="polite">${rows.length} game${rows.length === 1 ? '' : 's'}${prof ? ', best match first' : ''}</span>
+        <div class="tabs" role="tablist" aria-label="View" style="margin:0;padding:0">${[['list', 'layout-grid', 'List'], ['map', 'map', 'Map'], ['calendar', 'calendar', 'Calendar']].map(([k, icon, l]) => html`<button class="tab ${view === k ? 'on' : ''}" role="tab" aria-selected="${view === k ? 'true' : 'false'}" data-act="gamesView" data-v="${k}">${ic(icon)} ${l}</button>`)}</div></div></div>
+    ${ad}
+    ${!rows.length ? emptyState('search-x', 'No games match those filters', 'Widen your search, or host the game you were looking for.', html`<a class="btn btn-blue" href="#/app/games/new">Create a game</a>`) : view === 'map' ? html`<div id="game-map" class="mt" role="application" aria-label="Map of games"></div>` : view === 'calendar' ? gameCalendar(rows) : html`<div class="cards3 mt">${rows.map((g, i) => gameCard(g, i))}</div>`}
+    ${fetched >= limit && view === 'list' ? html`<div class="mt-lg" style="text-align:center"><button class="btn btn-ghost" data-act="moreGames">Show more games</button></div>` : ''}
+  </div>`;
+}, { title: 'Find games', desc: 'Open football, basketball, athletics and other games near you.' });
+</script>
+</body>
+</html>

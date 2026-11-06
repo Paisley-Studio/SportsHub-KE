@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SportsHub-KE | One platform. Every sport. Every player.</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="SportsHub-KE | One platform. Every sport. Every player.">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, money, pct, titleCase, fmtDate, fmtDT } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { S, canAdmin, A, badge, table, fld, promptForm, run, notFound, route } from '/shared/js/ui.js';
+
+const matchBox = (f, canEdit) => { const done = f.status === 'completed', hw = done && f.homeScore > f.awayScore, aw = done && f.awayScore > f.homeScore; return html`<div class="match"><div class="${hw ? 'win' : ''}"><span class="clip">${f.homeName}</span><span class="nums">${done ? f.homeScore : ''}</span></div><div class="${aw ? 'win' : ''}"><span class="clip">${f.awayName}</span><span class="nums">${done ? f.awayScore : ''}</span></div>${!done && canEdit ? html`<div><button class="small semi" data-act="recordScore" data-id="${f.id}" data-h="${f.homeName}" data-a="${f.awayName}">Enter result</button></div>` : ''}</div>`; };
+A.enterTournament = async d => {
+  const t = await db.get('tournaments', d.id);
+  let teamId = '';
+  if (t.registrationType === 'team') {
+    const teams = (await db.list('teams', { where: [['captainId', '==', S.uid]], limit: 10 })).filter(x => x.sportId === t.sportId);
+    const v = await promptForm({ title: `Enter ${t.name}`, intro: t.entryFee ? `Entry fee of ${money(t.entryFee)} is settled with the organiser.` : '', fields: fld({ name: 'teamId', label: 'Team', type: 'select', required: true, options: teams.map(x => [x.id, x.name]), full: true }), submit: 'Submit entry', tone: 'btn-yellow' });
+    if (!v) return; teamId = v.teamId;
+  }
+  await run('registerTournament', { tournamentId: d.id, teamId }, 'Entry submitted. The organiser will confirm.').catch(() => {});
+};
+route('/tournaments/:id', async ({ id }) => {
+  const t = await db.get('tournaments', id);
+  if (!t) return notFound();
+  S.pageTitle = t.name;
+  const [fx, entries] = await Promise.all([db.list('fixtures', { where: [['tournamentId', '==', id]], limit: 200 }), db.list('tournamentRegistrations', { where: [['tournamentId', '==', id]], limit: 200 })]);
+  const isOrg = S.uid && (t.organiserId === S.uid || canAdmin('tournaments')), isOff = isOrg || (t.officialIds || []).includes(S.uid);
+  const myTeams = S.uid && t.registrationType === 'team' ? (await db.list('teams', { where: [['captainId', '==', S.uid]], limit: 10 })).filter(x => x.sportId === t.sportId) : [];
+  const table_ = Object.entries(t.standings || {}).map(([k, r]) => ({ k, ...r })).sort((a, b) => (a.group || '').localeCompare(b.group || '') || b.points - a.points || (b.for - b.against) - (a.for - a.against));
+  const groups = [...new Set(table_.map(r => r.group || ''))];
+  const rounds = [...new Set(fx.map(f => f.round))].sort((a, b) => a - b);
+  const already = S.uid && entries.some(e => e.by === S.uid);
+  return html`<div class="pg-hero" style="--c:var(--yellow);--c2:var(--magenta)"><span class="blob ph-b1"></span><span class="blob ph-b2"></span><div class="wrap stack" style="display:flex;align-items:flex-start;flex-direction:column"><span class="eyebrow c-yellow">${t.sportName} · ${titleCase(t.format)}</span><h1>${t.name}</h1>
+      <div class="row">${badge(t.status)}<span class="small">${fmtDate(t.start)} to ${fmtDate(t.end)}</span><span class="small">${t.venue}, ${t.county}</span><span class="small">${t.ageCategory}</span><span class="small semi">${t.entryFee ? `${money(t.entryFee)} entry` : 'Free entry'}</span></div>
+      ${t.winner ? html`<p class="semi row sm">${ic('trophy')} Winner: ${t.winner}</p>` : ''}</div></div>
+    <div class="wrap section tight c-yellow"><div class="grid g-side"><div class="stack lg">
+      <p class="lede">${t.description}</p>${t.requirements ? html`<div class="notice c-yellow"><b>Requirements.</b> ${t.requirements}</div>` : ''}
+      ${table_.length ? html`<div class="panel"><h3 class="mb">Standings</h3>${groups.map(g => html`${g ? html`<h4 class="mt mb">Group ${g}</h4>` : ''}${table([{ h: 'Team', v: r => html`<span class="semi">${r.name}</span>` }, { h: 'P', right: true, v: r => r.played }, { h: 'W', right: true, v: r => r.won }, { h: 'D', right: true, v: r => r.drawn }, { h: 'L', right: true, v: r => r.lost }, { h: 'GD', right: true, v: r => r.for - r.against }, { h: 'Pts', right: true, v: r => html`<b>${r.points}</b>` }], table_.filter(r => (r.group || '') === g))}`)}</div>` : ''}
+      ${t.format === 'individual' ? html`<div class="panel"><div class="panel-head"><h3>Leaderboard</h3>${isOff ? html`<button class="btn btn-yellow btn-sm" data-act="addIndividualResult" data-id="${id}">Record a result</button>` : ''}</div>${(t.leaderboard || []).length ? table([{ h: 'Pos', v: (r) => html`${t.leaderboard.indexOf(r) + 1}` }, { h: 'Competitor', v: r => html`<span class="semi">${r.name}</span>` }, { h: t.metricLabel || 'Result', right: true, v: r => r.value }], t.leaderboard) : html`<p class="small muted">Results will appear when the competition begins.</p>`}</div>` : ''}
+      ${fx.length ? (t.format === 'knockout' ? html`<div class="panel"><h3 class="mb">Bracket</h3><div class="bracket">${rounds.map(r => { const row = fx.filter(f => f.round === r); return html`<div class="col"><div class="xs strong faint">${row[0].roundLabel}</div>${row.map(f => matchBox(f, isOff))}</div>`; })}</div></div>` : html`<div class="panel"><h3 class="mb">Fixtures and results</h3>${rounds.map(r => html`<h4 class="mt mb small faint">${fx.find(f => f.round === r).roundLabel}</h4><div class="lines">${fx.filter(f => f.round === r).map(f => html`<div class="row between"><div style="min-width:0"><span class="semi">${f.homeName} ${f.status === 'completed' ? html`<span class="nums">${f.homeScore} : ${f.awayScore}</span>` : 'v'} ${f.awayName}</span><div class="small muted">${fmtDT(f.start)}</div></div>${f.status !== 'completed' && isOff ? html`<button class="btn btn-sm btn-ghost" data-act="recordScore" data-id="${f.id}" data-h="${f.homeName}" data-a="${f.awayName}">Enter result</button>` : badge(f.status)}</div>`)}</div>`)}</div>`) : (t.format !== 'individual' ? html`<p class="small muted">Fixtures are published when the organiser closes registration.</p>` : '')}
+      </div><aside class="stack" style="position:sticky;top:88px"><div class="panel stack">
+        <div class="row between"><span class="semi">${t.registered} of ${t.capacity} entered</span></div><div class="bar c-yellow"><i style="width:${pct(t.registered, t.capacity)}%"></i></div>
+        ${t.status === 'open' ? (S.uid ? (already ? badge('requested') : t.registrationType === 'team' ? (myTeams.length ? html`<button class="btn btn-yellow btn-block" data-act="enterTournament" data-id="${id}">Enter my team</button>` : html`<p class="small muted">Only captains of a ${t.sportName.toLowerCase()} team can enter.</p><a class="btn btn-ghost btn-block" href="#/app/teams/new">Register a team</a>`) : html`<button class="btn btn-yellow btn-block" data-act="enterTournament" data-id="${id}">Enter this competition</button>`) : html`<a class="btn btn-yellow btn-block" href="#/signin">Sign in to enter</a>`) : ''}
+        ${(t.officials || []).length ? html`<div class="small"><span class="semi">Officials</span><ul>${t.officials.map(o => html`<li class="muted">${o.name}, ${o.role}</li>`)}</ul></div>` : ''}
+        <div class="small"><span class="semi">Organised by</span><div class="muted">${t.organiserName}</div></div></div>
+      <div class="panel"><h3 class="mb">Entries</h3><div class="lines small">${entries.length ? entries.map(e => html`<div class="row between"><span>${e.entrantName}</span>${badge(e.status)}</div>`) : html`<p class="muted">No entries yet.</p>`}</div></div>
+      ${isOrg ? html`<a class="btn btn-ghost btn-block" href="#/app/org/competitions/${id}">Manage this competition</a>` : ''}</aside></div></div>`;
+});
+</script>
+</body>
+</html>

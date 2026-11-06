@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Team home | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Team home | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { SKILLS, html, ic, fmtDT } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, SPORT, A, avatar, metrics, fld, promptForm, run, adSlot, dashHero } from '/shared/js/ui.js';
+import { nowISO, fixtureLine, appRoute, captainTeam, noTeam, teamTabs } from '/shared/js/features.js';
+
+A.addAchievement = async d => { const v = await promptForm({ title: 'Add an achievement', fields: fld({ name: 'achievement', label: 'Achievement', required: true, full: true }), submit: 'Add' }); if (v) await run('updateTeam', { id: d.t, ...v }, 'Saved.').catch(() => {}); };
+A.editTeam = async d => {
+  const t = await db.get('teams', d.t);
+  const v = await promptForm({ title: 'Edit team profile', wide: true, fields: html`${fld({ name: 'town', label: 'Town', value: t.town })}${fld({ name: 'area', label: 'Playing area', value: t.area })}${fld({ name: 'format', label: 'Format', value: t.format })}${fld({ name: 'skill', label: 'Skill level', type: 'select', value: t.skill, options: SKILLS })}${fld({ name: 'lookingFor', label: 'Positions you need', type: 'checks', value: t.lookingFor || [], options: SPORT(t.sportId).positions, full: true, hint: 'Players in these positions see your team first.' })}${fld({ name: 'description', label: 'Description', type: 'textarea', value: t.description, full: true })}${fld({ name: 'logo', label: 'Logo', type: 'image', value: t.logo })}${fld({ name: 'recruiting', label: 'We are recruiting', type: 'tick', value: t.recruiting })}`, submit: 'Save' });
+  if (v) await run('updateTeam', { id: d.t, ...v }, 'Team updated.').catch(() => {});
+};
+appRoute('/app/team', async () => {
+  const { team: t, mine } = await captainTeam(); if (!t) return noTeam();
+  const [members, fixtures, chall, training, transfers, ad] = await Promise.all([db.list('teamMembers', { where: [['teamId', '==', t.id]], limit: 80 }), db.list('fixtures', { where: [['teamIds', 'array-contains', t.id]], orderBy: ['start', 'asc'], limit: 30 }), db.list('challenges', { where: [['officials', 'array-contains', S.uid]], limit: 30 }), db.list('trainingSessions', { where: [['ownerId', '==', t.id]], limit: 20 }), db.list('teamTransfers', { where: [['officials', 'array-contains', S.uid], ['status', '==', 'pending']], limit: 20 }), adSlot('team_dash')]);
+  const st = t.stats || {}, active = members.filter(m => m.status === 'active'), req = members.filter(m => m.status === 'requested'), up = fixtures.filter(f => f.status === 'scheduled' && f.start > nowISO()), ch = chall.filter(c => c.status === 'pending' && c.awaitingTeamId === t.id);
+  const nextT = training.filter(x => x.start > nowISO()).sort((a, b) => a.start > b.start ? 1 : -1)[0];
+  return page(dashHero({ c: SPORT(t.sportId).color || 'green', c2: 'yellow', cut: 'guard', title: t.name, sub: html`<span>${t.sportName}</span><span>${t.town}, ${t.county}</span><span>${t.format || t.skill}</span><span class="avatars">${active.slice(0, 5).map(m => avatar(m.name, '', 'sm'))}</span>`, action: html`<button class="btn btn-green" data-act="openTeamChat" data-id="${t.id}">${ic('message-square')} Team chat</button><a class="btn btn-ghost on-dark" href="#/teams/${t.id}">Public page</a>` }), teamTabs(t, mine),
+    metrics([[active.length, 'Active players'], [st.played || 0, 'Played'], [`${st.won || 0}-${st.drawn || 0}-${st.lost || 0}`, 'Won, drawn, lost'], [(st.for || 0) - (st.against || 0), 'Score difference'], [up.length, 'Upcoming fixtures']]),
+    html`<div class="grid g-side mt-lg"><div class="stack xl">
+      ${req.length || ch.length || transfers.length ? html`<section class="panel"><div class="panel-head"><h3>Needs your decision</h3></div><div class="lines">
+        ${req.map(m => html`<div class="row between"><span><b>${m.name}</b> asked to join.${m.message ? html` <span class="small muted">"${m.message}"</span>` : ''}</span><span class="row sm"><button class="btn btn-sm btn-green" data-act="teamReview" data-t="${t.id}" data-uid="${m.uid}" data-v="1">Approve</button><button class="btn btn-sm btn-ghost" data-act="teamReview" data-t="${t.id}" data-uid="${m.uid}" data-v="">Decline</button></span></div>`)}
+        ${ch.map(c => html`<div class="row between"><span><b>${c.fromName}</b> challenged you on ${fmtDT(c.start)}.</span><a class="btn btn-sm" href="#/app/team/challenges">Respond</a></div>`)}
+        ${transfers.map(x => html`<div class="row between"><span><b>${x.name}</b>: ${x.fromName} to ${x.toName}.</span><a class="btn btn-sm btn-ghost" href="#/app/team/transfers">Review</a></div>`)}</div></section>` : ''}
+      <section class="panel"><div class="panel-head"><h3>Next fixtures</h3><a class="small semi" href="#/app/team/fixtures">All</a></div>${up.length ? html`<div class="lines">${up.slice(0, 4).map(fixtureLine)}</div>` : html`<p class="small muted">No fixtures yet. Challenge a team to get started.</p>`}</section>
+      ${ad}
+      <section class="panel"><div class="panel-head"><h3>Achievements</h3><button class="btn btn-sm btn-ghost" data-act="addAchievement" data-t="${t.id}">${ic('plus')} Add</button></div>${(t.achievements || []).length ? html`<ul class="stack sm small">${t.achievements.map(a => html`<li class="row sm">${ic('trophy')} ${a}</li>`)}</ul>` : html`<p class="small muted">Record your first trophy.</p>`}</section></div>
+    <aside class="stack lg"><div class="panel stack sm"><h3>Quick actions</h3><a class="btn btn-ghost btn-block" href="#/app/team/squad">${ic('user-plus')} Add or invite players</a><a class="btn btn-ghost btn-block" href="#/app/team/challenges">${ic('swords')} Challenge a team</a><a class="btn btn-ghost btn-block" href="#/app/team/training">${ic('dumbbell')} Schedule training</a><a class="btn btn-ghost btn-block" href="#/tournaments">${ic('trophy')} Enter a tournament</a><button class="btn btn-ghost btn-block" data-act="editTeam" data-t="${t.id}">${ic('settings')} Edit team profile</button></div>
+    <div class="panel"><h3 class="mb">Next training</h3>${nextT ? html`<p class="semi">${nextT.title}</p><p class="small muted">${fmtDT(nextT.start)} · ${nextT.venue}</p>` : html`<p class="small muted">Nothing scheduled.</p>`}</div></aside></div>`);
+}, 'Team home');
+</script>
+</body>
+</html>

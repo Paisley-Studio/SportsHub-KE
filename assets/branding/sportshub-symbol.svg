@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SportsHub symbol (placeholder until the official artwork is added)">
+  <!-- PLACEHOLDER MARK. Replace this file with the official SportsHub symbol. Built only from the four specified brand colours. -->
+  <path fill="#20AFE4" d="M32 4a28 28 0 0 1 20 8.4L39 25.4A10 10 0 0 0 32 22z"/>
+  <path fill="#36AE5B" d="M52 12.400a28 28 0 0 1 8 19.600H42a10 10 0 0 0-3-6.600z"/>
+  <path fill="#F3B500" d="M60 32a28 28 0 0 1-8 19.600L39 38.600a10 10 0 0 0 3-6.600z"/>
+  <path fill="#D60969" d="M52 51.600A28 28 0 0 1 32 60V42a10 10 0 0 0 7-3.400z"/>
+  <path fill="#20AFE4" d="M32 60a28 28 0 0 1-20-8.400L25 38.600A10 10 0 0 0 32 42z"/>
+  <path fill="#36AE5B" d="M12 51.600A28 28 0 0 1 4 32h18a10 10 0 0 0 3 6.600z"/>
+  <path fill="#F3B500" d="M4 32a28 28 0 0 1 8-19.600L25 25.400A10 10 0 0 0 22 32z"/>
+  <path fill="#D60969" d="M12 12.400A28 28 0 0 1 32 4v18a10 10 0 0 0-7 3.400z"/>
+</svg>

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>My teams | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="My teams | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, titleCase } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, A, badge, emptyState, table, fld, confirmBox, promptForm, run } from '/shared/js/ui.js';
+import { appRoute, pageHead } from '/shared/js/features.js';
+
+A.leaveTeam = async d => { if (await confirmBox('Leave this team?', 'You can ask to rejoin later.', 'Leave team', 'btn-bad')) await run('teamLeave', { teamId: d.id }, 'You left the team.').catch(() => {}); };
+A.askTransfer = async d => {
+  const teams = (await db.list('teams', { limit: 80 })).filter(t => t.id !== d.id);
+  const v = await promptForm({ title: 'Request a team transfer', intro: 'Officials of both teams need to approve.', fields: html`${fld({ name: 'toTeamId', label: 'New team', type: 'select', required: true, options: teams.map(t => [t.id, `${t.name} (${t.sportName})`]), full: true })}${fld({ name: 'reason', label: 'Reason', type: 'textarea', full: true })}`, submit: 'Send request' });
+  if (v) await run('requestTeamTransfer', { fromTeamId: d.id, toTeamId: v.toTeamId, reason: v.reason }, 'Transfer request sent.').catch(() => {});
+};
+/* ----- Player: teams, stats, transfers, payments, orders, requests ----- */
+appRoute('/app/teams', async () => {
+  const rows = await db.list('teamMembers', { where: [['uid', '==', S.uid]], limit: 30 });
+  const active = rows.filter(r => r.status === 'active'), inv = rows.filter(r => r.status === 'invited'), req = rows.filter(r => r.status === 'requested');
+  const tr = await db.list('teamTransfers', { where: [['uid', '==', S.uid]], limit: 10 });
+  return page(pageHead('My teams', '', html`<div class="row"><a class="btn btn-ghost" href="#/teams">Find a team</a><a class="btn btn-green" href="#/app/teams/new">${ic('plus')} Register a team</a></div>`),
+    inv.length ? html`<div class="panel mb"><h3 class="mb">Invitations</h3><div class="lines">${inv.map(i => html`<div class="row between"><a class="semi" href="#/teams/${i.teamId}">${i.teamName}</a><span class="row sm"><button class="btn btn-sm" data-act="respondInvite" data-id="${i.teamId}" data-v="1">Accept</button><button class="btn btn-sm btn-ghost" data-act="respondInvite" data-id="${i.teamId}" data-v="">Decline</button></span></div>`)}</div></div>` : '',
+    table([{ h: 'Team', v: r => html`<a class="semi" href="#/teams/${r.teamId}">${r.teamName}</a>` }, { h: 'Role', v: r => titleCase(r.role) }, { h: '', act: true, v: r => html`<button class="btn btn-sm btn-ghost" data-act="openTeamChat" data-id="${r.teamId}">Team chat</button>${r.role !== 'captain' ? html`<button class="btn btn-sm btn-ghost" data-act="askTransfer" data-id="${r.teamId}">Request transfer</button><button class="btn btn-sm btn-ghost" data-act="leaveTeam" data-id="${r.teamId}">Leave</button>` : ''}` }], active, emptyState('users', 'You are not in a team yet', 'Teams nearby are looking for players.', html`<a class="btn" href="#/teams">Find a team</a>`)),
+    req.length ? html`<div class="panel mt-lg"><h3 class="mb">Requests sent</h3><div class="lines small">${req.map(r => html`<div class="row between"><span>${r.teamName}</span>${badge('requested')}</div>`)}</div></div>` : '',
+    tr.length ? html`<div class="panel mt-lg"><h3 class="mb">Transfer requests</h3><div class="lines small">${tr.map(t => html`<div class="row between"><span>${t.fromName} to ${t.toName}</span>${badge(t.status)}</div>`)}</div></div>` : '');
+}, 'My teams');
+</script>
+</body>
+</html>

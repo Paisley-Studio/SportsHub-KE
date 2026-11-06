@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Talent discovery | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Talent discovery | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { COUNTY_NAMES, AVAILABILITY, SKILLS, html, raw, ic, titleCase } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, SPORT, hasRole, emptyState, table, dashHero } from '/shared/js/ui.js';
+import { filterSelect, filterText, appRoute } from '/shared/js/features.js';
+
+/* ----- Scouting ----- */
+appRoute('/app/scout', async () => {
+  if (!hasRole('scout') && !hasRole('coach') && !S.adminRole) {
+    const v = await db.get('verificationRequests', `scout_${S.uid}`);
+    return page(emptyState('search', v ? `Application ${titleCase(v.status).toLowerCase()}` : 'Talent discovery is for verified scouts', 'Authorised scouts, coaches and organisations can filter player profiles.', v ? '' : html`<a class="btn" href="#/join/scout">Apply</a>`));
+  }
+  const q = S.query, where = [['visibility', 'in', ['public', 'members']]];
+  if (q.sport) where.push(['sports', 'array-contains', q.sport]);
+  if (q.county) where.push(['county', '==', q.county]);
+  let rows = await db.list('playerProfiles', { where, limit: 80 });
+  const minors = await db.list('playerProfiles', { where: [['visibility', '==', 'protected'], ['guardianVerified', '==', true], ...(q.sport ? [['sports', 'array-contains', q.sport]] : []), ...(q.county ? [['county', '==', q.county]] : [])], limit: 30 });
+  rows = [...rows, ...minors];
+  if (q.skill) rows = rows.filter(p => p.skill === q.skill);
+  if (q.age) rows = rows.filter(p => p.ageBand === q.age);
+  if (q.position) rows = rows.filter(p => Object.values(p.positions || {}).some(x => String(x).toLowerCase().includes(q.position.toLowerCase())));
+  if (q.avail) rows = rows.filter(p => (p.availability || []).includes(q.avail));
+  const allStats = await Promise.all(rows.slice(0, 60).map(p => db.list('playerStatistics', { where: [['uid', '==', p.id], ['source', '==', 'verified']], limit: 5 })));
+  const verifiedBy = {}; rows.slice(0, 60).forEach((p, i) => { verifiedBy[p.id] = allStats[i]; });
+  if (q.verified) rows = rows.filter(p => (verifiedBy[p.id] || []).length);
+  return page(dashHero({ c: 'blue', c2: 'green', cut: 'kick', title: 'Talent discovery', sub: 'Filter by sport, position, county, age band and verified performance. Contact is controlled, and private details are never shown.' }),
+    html`<div class="grid mb" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">${filterSelect('sport', 'Sport', q.sport, S.sports.map(s => [s.id, s.name]), 'Every sport')}${filterText('position', 'Position', q.position)}${filterSelect('county', 'County', q.county, COUNTY_NAMES, 'All counties')}${filterSelect('age', 'Age eligibility', q.age, ['U13', 'U16', 'U18', 'U21', 'Senior'], 'Any age')}${filterSelect('skill', 'Skill', q.skill, SKILLS, 'Any level')}${filterSelect('avail', 'Availability', q.avail, AVAILABILITY, 'Any time')}<label class="tick" style="align-self:end;padding-bottom:10px"><input type="checkbox" name="verified" data-filter ${q.verified ? raw('checked') : ''}><span>Verified performance only</span></label></div>`,
+    table([{ h: 'Player', v: p => html`<a class="semi" href="#/players/${p.id}">${p.name}</a>${p.isMinor ? html` <span class="tag">Under 18</span>` : ''}` }, { h: 'Sports', v: p => (p.sports || []).map(s => SPORT(s).name).join(', ') }, { h: 'Level', v: p => p.skill }, { h: 'County', v: p => p.county }, { h: 'Verified records', v: p => { const v = verifiedBy[p.id] || []; return v.length ? html`<span class="verified">${ic('badge-check')} ${v.length}</span>` : html`<span class="faint small">None</span>`; } }, { h: '', act: true, v: p => p.id !== S.uid ? html`<button class="btn btn-sm btn-ghost" data-act="contactPlayer" data-uid="${p.id}">Contact request</button>` : '' }], rows, emptyState('search-x', 'No players match', 'Loosen a filter or two.')));
+}, 'Talent discovery');
+</script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vendor approvals | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Vendor approvals | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { A, badge, table, fld, promptForm, run, route } from '/shared/js/ui.js';
+import { pageHead, adminPage, adminView, decisionPrompt, REVIEW_OPTS } from '/shared/js/features.js';
+
+/* ----- Marketplace ----- */
+adminView.vendors = async () => {
+  const rows = await db.list('vendors', { limit: 100 });
+  rows.sort((a, b) => (a.status === 'pending' ? -1 : 1) - (b.status === 'pending' ? -1 : 1));
+  return html`${pageHead('Vendor approvals', 'Sellers can only list products after approval.', html`<button class="btn btn-ghost" data-act="payoutPrompt">${ic('wallet')} Record a payout</button>`)}${table([{ h: 'Business', v: v => html`<span class="semi">${v.businessName}</span><br><span class="xs faint">${v.ownerName} · ${v.town}, ${v.county}</span>` }, { h: 'About', v: v => v.description }, { h: 'Status', v: v => badge(v.status) }, { h: '', act: true, v: v => html`<button class="btn btn-sm" data-act="reviewVendor" data-uid="${v.id}">Review</button>` }], rows)}`;
+};
+A.reviewVendor = async d => { const v = await decisionPrompt('Review vendor', '', REVIEW_OPTS); if (v) await run('reviewVendor', { uid: d.uid, ...v }, 'Decision recorded.').catch(() => {}); };
+A.payoutPrompt = async () => {
+  const stores = await db.list('stores', { limit: 100 });
+  const v = await promptForm({ title: 'Record a payout', intro: 'Pays all completed, unpaid orders for this vendor.', fields: fld({ name: 'vendorId', label: 'Vendor', type: 'select', required: true, options: stores.map(s => [s.vendorId, s.name]), full: true }), submit: 'Record payout' });
+  if (v) await run('createPayout', v, 'Payout recorded.').catch(() => {});
+};
+route('/admin/vendors', adminPage('vendors'), { shell: 'app', auth: true, admin: true, title: "Vendor approvals" });
+</script>
+</body>
+</html>

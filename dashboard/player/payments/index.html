@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Payments | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Payments | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, money, fmtDT } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, A, badge, emptyState, table, openModal } from '/shared/js/ui.js';
+import { receiptHtml, appRoute, pageHead } from '/shared/js/features.js';
+
+A.viewReceipt = async d => { const t = await db.get('paymentTransactions', d.id); openModal({ title: 'Payment receipt', body: html`${t.simulated ? html`<div class="notice c-yellow small mb">Simulated transaction. Not a real payment.</div>` : ''}${receiptHtml(t)}`, foot: html`<button class="btn btn-ghost" data-act="printReceipt">${ic('printer')} Print</button><button class="btn" data-act="closeModal">Close</button>` }).then(() => {}); };
+appRoute('/app/payments', async () => {
+  const rows = await db.list('paymentTransactions', { where: [['uid', '==', S.uid]], orderBy: ['initiatedAt', 'desc'], limit: 40 });
+  return page(pageHead('Payments', 'All registration, membership and marketplace payments.'),
+    '',
+    table([{ h: 'Date', v: t => fmtDT(t.initiatedAt) }, { h: 'Description', v: t => html`${t.description}${t.simulated ? html` <span class="tag sim">Simulated</span>` : ''}` }, { h: 'Reference', v: t => t.ref }, { h: 'Amount', right: true, v: t => money(t.amount) }, { h: 'Status', v: t => badge(t.status) }, { h: '', act: true, v: t => html`${t.status === 'success' ? html`<button class="btn btn-sm btn-ghost" data-act="viewReceipt" data-id="${t.id}">Receipt</button>` : ''}${false ? html`<button class="btn btn-sm btn-ghost" data-act="replayCallback" data-id="${t.id}" title="Send the same payment callback again to prove it is ignored">Replay callback</button>` : ''}` }], rows, emptyState('receipt', 'No payments yet', 'Your receipts will appear here.')));
+}, 'Payments');
+</script>
+</body>
+</html>

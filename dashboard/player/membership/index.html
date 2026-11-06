@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Membership | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Membership | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, money, titleCase, fmtDate, fmtDT } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, A, badge, table, opt, run } from '/shared/js/ui.js';
+import { nowISO, membershipCard, appRoute, pageHead } from '/shared/js/features.js';
+
+A.setRenewal = (d, el) => run('membershipSetRenewal', { renewal: el.value }, 'Renewal preference saved.').catch(() => {});
+appRoute('/app/membership', async () => {
+  const uid = S.uid, s = S.settings;
+  const [ledger, periods, pays, sessions] = await Promise.all([
+    db.list('membershipLedger', { where: [['uid', '==', uid]], orderBy: ['at', 'desc'], limit: 40 }), db.list('membershipPeriods', { where: [['uid', '==', uid]], orderBy: ['start', 'desc'], limit: 12 }),
+    db.list('paymentTransactions', { where: [['uid', '==', uid], ['type', 'in', ['registration', 'membership']]], orderBy: ['initiatedAt', 'desc'], limit: 12 }), db.list('sessionBookings', { where: [['uid', '==', uid], ['covered', '==', true]], orderBy: ['start', 'desc'], limit: 30 })
+  ]);
+  const m = S.membership, scheduled = periods.find(p => p.status === 'scheduled');
+  return page(pageHead('Membership', `${money(s.membershipFee)} a month for ${s.sessionsPerPeriod} sessions, across any eligible sport.`),
+    html`<div class="grid g-side"><div class="stack xl">
+      ${membershipCard(true)}
+      ${S.period ? html`<div class="row">${scheduled ? html`<span class="badge ok">Next month already paid. Starts ${fmtDate(scheduled.start)}</span>` : html`<button class="btn btn-green" data-act="payFee" data-type="membership">Renew for next month</button>`}${''}</div>` : ''}
+      <section class="panel"><div class="panel-head"><h3>Session history</h3></div>${table([{ h: 'Session', v: x => html`<span class="semi">${x.title}</span>` }, { h: 'When', v: x => fmtDT(x.start) }, { h: 'Status', v: x => badge(x.status) }], sessions, html`<p class="small muted">Your attended and reserved sessions will be listed here.</p>`)}</section>
+      <section class="panel"><div class="panel-head"><h3>Session ledger</h3><span class="small muted">Every change to your balance</span></div>${table([{ h: 'Date', v: l => fmtDT(l.at) }, { h: 'Entry', v: l => titleCase(l.type) }, { h: 'Note', v: l => l.note }, { h: 'Change', right: true, v: l => l.delta ? (l.delta > 0 ? `+${l.delta}` : l.delta) : '' }, { h: 'Balance', right: true, v: l => l.balanceAfter }], ledger, html`<p class="small muted">Your ledger starts when you activate a membership.</p>`)}</section>
+      <section class="panel"><div class="panel-head"><h3>Membership months</h3></div>${table([{ h: 'Period', v: p => `${fmtDate(p.start)} to ${fmtDate(p.end)}` }, { h: 'Status', v: p => badge(p.status) }, { h: 'Used', right: true, v: p => p.used || 0 }, { h: 'Expired', right: true, v: p => p.expired ?? '' }], periods, html`<p class="small muted">No membership months yet.</p>`)}</section>
+    </div><aside class="stack lg">
+      <div class="panel"><h3 class="mb">Status</h3><dl class="kv small"><dt>Member ID</dt><dd>${S.user.memberId}</dd><dt>Registration</dt><dd>${badge(m && m.registrationStatus === 'paid' ? 'paid' : m ? m.registrationStatus : 'pending')}</dd><dt>Membership</dt><dd>${badge(m ? m.status : 'inactive')}</dd>${m && m.start ? html`<dt>Started</dt><dd>${fmtDate(m.start)}</dd><dt>Ends</dt><dd>${fmtDate(m.end)}</dd>` : ''}<dt>Strikes</dt><dd>${m ? m.strikes || 0 : 0} of ${s.strikeLimit}</dd>${m && m.restrictedUntil && m.restrictedUntil > nowISO() ? html`<dt>Bookings paused until</dt><dd>${fmtDate(m.restrictedUntil)}</dd>` : ''}</dl></div>
+      ${m && m.status === 'active' ? html`<div class="panel stack"><h3>Renewal</h3><div class="field"><label for="ren">Preference</label><select id="ren" data-change="setRenewal">${opt('manual', 'Remind me to renew', m.renewal)}${opt('auto', 'Automatic, when payments go live', m.renewal)}${opt('cancelled', 'Do not renew', m.renewal)}</select></div><p class="xs faint">You keep your sessions until this month ends.</p></div>` : ''}
+      <div class="panel"><h3 class="mb">Policies</h3><ul class="stack sm small muted"><li>Booking reserves a session. It is only used if you attend.</li><li>Cancel at least ${s.cancelWindowHours} hours before at no cost.</li><li>Late cancellations and no-shows return the session but record a strike. ${s.strikeLimit} strikes pause bookings for ${s.restrictDays} days.</li><li>Unused sessions expire at month end.</li></ul><a class="small semi" href="#/legal/terms">Full terms</a></div>
+      <div class="panel"><h3 class="mb">Payments</h3><div class="lines small">${pays.slice(0, 5).map(t => html`<div class="row between"><span>${titleCase(t.type)}<br><span class="xs faint">${fmtDate(t.initiatedAt)}</span></span><span class="tar">${money(t.amount)}<br>${badge(t.status)}</span></div>`)}</div><a class="small semi" href="#/app/payments">All payments</a></div>
+      ${false ? html`<div class="panel stack"><h3>Demo tools</h3><p class="small muted">End this month now to see expiry, the ledger entry and any scheduled renewal start.</p><button class="btn btn-ghost btn-sm" data-act="fastForward">${ic('fast-forward')} Fast-forward to month end</button></div>` : ''}
+    </aside></div>`);
+}, 'Membership');
+</script>
+</body>
+</html>

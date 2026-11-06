@@ -1,0 +1,17 @@
+{
+  "name": "sportshub-uploads",
+  "description": "Cloudflare Worker that signs direct uploads to the sports-hub-buckets R2 bucket",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.700.0",
+    "@aws-sdk/s3-request-presigner": "^3.700.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

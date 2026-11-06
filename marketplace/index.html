@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kit from verified sellers | SportsHub-KE</title>
+<meta name="description" content="Boots, kits, running shoes, golf clubs and more from verified sellers.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Kit from verified sellers | SportsHub-KE">
+<meta property="og:description" content="Boots, kits, running shoes, golf clubs and more from verified sellers.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { PRODUCT_CATEGORIES, html, raw } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { S, avatar, emptyState, route, adSlot, pgHero } from '/shared/js/ui.js';
+import { filterSelect, adSlotData, productCard } from '/shared/js/features.js';
+
+/* ----- Marketplace ----- */
+route('/marketplace', async () => {
+  const q = S.query, where = [['status', '==', 'active']];
+  if (q.cat) where.push(['category', '==', q.cat]);
+  if (q.q) where.push(['searchTokens', 'array-contains', q.q.toLowerCase().split(/\s+/)[0].slice(0, 12)]);
+  let rows = await db.list('products', { where, limit: 60 });
+  if (q.sport) rows = rows.filter(p => p.sportId === q.sport);
+  if (q.max) rows = rows.filter(p => (p.salePrice || p.price) <= Number(q.max));
+  if (q.sale) rows = rows.filter(p => p.salePrice);
+  rows.sort((a, b) => q.sort === 'low' ? (a.salePrice || a.price) - (b.salePrice || b.price) : q.sort === 'high' ? (b.salePrice || b.price) - (a.salePrice || a.price) : (b.sold || 0) - (a.sold || 0));
+  const [ad, spon, stores] = await Promise.all([adSlot('marketplace'), adSlotData('sponsored_product'), db.list('stores', { where: [['active', '==', true]], limit: 6 })]);
+  return html`${pgHero({ c: 'magenta', c2: 'yellow', eye: 'Sports marketplace', title: 'Kit from verified sellers', lede: 'Boots, kits, running shoes, clubs and equipment, from people who play.', action: html`<a class="btn btn-magenta" href="#/join/vendor">Open a store</a>` })}<div class="wrap section tight c-magenta">
+    <div class="grid mb" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">
+      <div class="field"><label for="ff-q">Search products</label><input id="ff-q" name="q" value="${q.q || ''}" placeholder="Boots, jerseys..." data-filter></div>
+      ${filterSelect('cat', 'Category', q.cat, PRODUCT_CATEGORIES, 'All categories')}${filterSelect('sport', 'Sport', q.sport, S.sports.map(s => [s.id, s.name]), 'Every sport')}${filterSelect('max', 'Max price', q.max, [['2000', 'Up to KES 2,000'], ['5000', 'Up to KES 5,000'], ['10000', 'Up to KES 10,000'], ['25000', 'Up to KES 25,000']], 'Any price')}${filterSelect('sort', 'Sort', q.sort, [['low', 'Price, low to high'], ['high', 'Price, high to low']], 'Best selling')}
+      <label class="tick" style="align-self:end;padding-bottom:10px"><input type="checkbox" name="sale" data-filter ${q.sale ? raw('checked') : ''}><span>On offer</span></label></div>
+    ${ad}
+    ${rows.length ? html`<div class="prods mt">${rows.map(productCard)}</div>` : emptyState('package', 'No products match', 'Try a different category or clear your search.', html`<button class="btn" data-act="clearFilters">Clear filters</button>`)}
+    <section class="section tight"><div class="panel"><div class="panel-head"><h3>Stores</h3></div><div class="grid g3">${stores.map(s => html`<a class="row nowrap" href="#/marketplace/store/${s.id}">${avatar(s.name, s.logo, 'sq')}<span style="min-width:0"><span class="semi" style="display:block">${s.name}</span><span class="small muted">${s.town}, ${s.county}</span></span></a>`)}</div></div></section>
+  </div>`;
+}, { title: 'Marketplace', desc: 'Boots, kits, running shoes, golf clubs and more from verified sellers.' });
+</script>
+</body>
+</html>

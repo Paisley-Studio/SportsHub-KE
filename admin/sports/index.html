@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sports and disciplines | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Sports and disciplines | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, titleCase } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { S, A, badge, table, fld, promptForm, run, renderMain, route } from '/shared/js/ui.js';
+import { pageHead, adminPage, adminView } from '/shared/js/features.js';
+
+/* ----- Sport ----- */
+adminView.sports = async () => {
+  const rows = await db.list('sports', { limit: 100 });
+  rows.sort((a, b) => a.name.localeCompare(b.name));
+  return html`${pageHead('Sports and disciplines', 'Every sport has its own configuration. Nothing is hardcoded around football.', html`<button class="btn" data-act="editSport">${ic('plus')} Add a sport</button>`)}${table([{ h: 'Sport', v: s => html`<span class="row sm semi">${ic(s.icon)} ${s.name}</span>` }, { h: 'Type', v: s => titleCase(s.type) }, { h: 'Formats', v: s => (s.formats || []).join(', ') }, { h: 'Statistics', v: s => (s.statFields || []).map(f => f.label).join(', ') }, { h: 'Status', v: s => s.active === false ? badge('inactive') : badge('active') }, { h: '', act: true, v: s => html`<button class="btn btn-sm btn-ghost" data-act="editSport" data-id="${s.id}">Configure</button>` }], rows)}`;
+};
+A.editSport = async d => {
+  const s = d.id ? await db.get('sports', d.id) : { type: 'team', active: true, statFields: [], durationMinutes: 60 };
+  const list = a => (a || []).join(', ');
+  const stat = (s.statFields || []).map(f => `${f.key}:${f.label}:${f.type}:${f.unit || ''}`).join('\n');
+  const v = await promptForm({ title: d.id ? `Configure ${s.name}` : 'Add a sport', wide: true, fields: html`${fld({ name: 'name', label: 'Name', value: s.name || '', required: true })}${fld({ name: 'type', label: 'Classification', type: 'select', value: s.type, options: [['team', 'Team'], ['individual', 'Individual'], ['both', 'Both']] })}${fld({ name: 'disciplines', label: 'Disciplines', value: list(s.disciplines), full: true })}${fld({ name: 'positions', label: 'Playing positions', value: list(s.positions), full: true })}${fld({ name: 'formats', label: 'Participation formats', value: list(s.formats) })}${fld({ name: 'teamSizes', label: 'Team sizes', value: list(s.teamSizes) })}${fld({ name: 'ageCategories', label: 'Age categories', value: list(s.ageCategories) })}${fld({ name: 'skillLevels', label: 'Skill levels', value: list(s.skillLevels) })}${fld({ name: 'durationMinutes', label: 'Match duration, minutes', type: 'number', min: 1, value: s.durationMinutes })}${fld({ name: 'scoring', label: 'Scoring format', value: s.scoring || '' })}${fld({ name: 'facilityRequirements', label: 'Facility requirements', value: list(s.facilityRequirements) })}${fld({ name: 'competitionFormats', label: 'Competition formats', value: list(s.competitionFormats) })}${fld({ name: 'statFieldsText', label: 'Performance statistics, one per line as key:Label:number or text:unit', type: 'textarea', rows: 5, value: stat, full: true })}${fld({ name: 'active', label: 'Active', type: 'tick', value: s.active !== false })}`, submit: 'Save sport' });
+  if (!v) return;
+  const csv = x => String(x || '').split(',').map(y => y.trim()).filter(Boolean);
+  const statFields = String(v.statFieldsText || '').split('\n').map(l => l.trim()).filter(Boolean).map(l => { const [key, label, type, unit] = l.split(':'); return { key, label: label || key, type: type || 'number', unit: unit || '' }; });
+  await run('upsertSport', { id: d.id || undefined, name: v.name, type: v.type, disciplines: csv(v.disciplines), positions: csv(v.positions), formats: csv(v.formats), teamSizes: csv(v.teamSizes), ageCategories: csv(v.ageCategories), skillLevels: csv(v.skillLevels), durationMinutes: v.durationMinutes, scoring: v.scoring, facilityRequirements: csv(v.facilityRequirements), competitionFormats: csv(v.competitionFormats), statFields, active: v.active, icon: s.icon, photo: s.photo }, 'Sport saved.').catch(() => {});
+  S.sports = await db.list('sports', { limit: 100 }); renderMain();
+};
+route('/admin/sports', adminPage('sports'), { shell: 'app', auth: true, admin: true, title: "Sports and disciplines" });
+</script>
+</body>
+</html>

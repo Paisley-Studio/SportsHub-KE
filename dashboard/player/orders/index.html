@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Orders | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Orders | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, money, fmtDate } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, badge, emptyState } from '/shared/js/ui.js';
+import { appRoute, pageHead } from '/shared/js/features.js';
+
+appRoute('/app/orders', async () => {
+  const rows = await db.list('orders', { where: [['buyerId', '==', S.uid]], orderBy: ['createdAt', 'desc'], limit: 30 });
+  return page(pageHead('Orders', ''), rows.length ? html`<div class="stack lg">${rows.map(o => html`<article class="panel"><div class="panel-head"><div><span class="semi">${o.number}</span> <span class="small muted">· ${o.storeName} · ${fmtDate(o.createdAt)}</span></div>${badge(o.status)}</div>
+    <div class="lines small">${o.items.map(i => html`<div class="row between"><a class="semi" href="#/marketplace/product/${i.productId}">${i.qty} × ${i.title}</a><span class="nums">${money(i.unit * i.qty)}</span></div>`)}</div>
+    <div class="row between mt"><div class="row sm">${o.status === 'delivered' ? html`<button class="btn btn-sm btn-green" data-act="orderTo" data-id="${o.id}" data-v="completed">Confirm received</button>` : ''}${['delivered', 'shipped'].includes(o.status) ? html`<button class="btn btn-sm btn-ghost" data-act="orderTo" data-id="${o.id}" data-v="disputed">Report a problem</button>` : ''}${o.status === 'completed' ? o.items.map(i => html`<button class="btn btn-sm btn-ghost" data-act="writeReview" data-type="product" data-id="${i.productId}">Review ${i.title}</button>`) : ''}<button class="btn btn-sm btn-ghost" data-act="contactSeller" data-v="${o.vendorId}" data-title="${o.storeName}">Contact seller</button></div><span class="price">${money(o.total)}</span></div></article>`)}</div>` : emptyState('shopping-bag', 'No orders yet', 'Boots, kits and equipment from verified sellers.', html`<a class="btn" href="#/marketplace">Visit the marketplace</a>`));
+}, 'Orders');
+</script>
+</body>
+</html>

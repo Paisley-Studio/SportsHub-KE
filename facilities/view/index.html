@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SportsHub-KE | One platform. Every sport. Every player.</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="SportsHub-KE | One platform. Every sport. Every player.">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, raw, ic, $, money, fmtDate, fmtDay, fmtDT, dayKey, zonedISO, Rules } from '/shared/js/core.js';
+import { db, callOp } from '/shared/js/firebase.js';
+import { S, SPORT, A, toast, showErr, verifiedMark, stars, opt, closeModal, openModal, go, notFound, route, refreshSession, pgHero } from '/shared/js/ui.js';
+import { qUpcoming, nowISO } from '/shared/js/features.js';
+
+/* Availability picker. Taken slots come from the same lock documents the backend checks. */
+A.openBooking = async d => {
+  if (!S.uid) { S.afterLogin = location.pathname + location.search; go('/signin'); return; }
+  const r = await db.get('facilityResources', d.res), f = await db.get('facilities', r.facilityId);
+  const dates = Array.from({ length: 14 }, (_, i) => dayKey(new Date(Date.now() + i * 864e5)));
+  const state = { date: dates[0], hour: null, kind: f.participating && r.memberEligible && S.period ? 'covered' : 'external', hours: 1 };
+  const draw = async () => {
+    const dayStart = zonedISO(state.date, '00:00'), dayEnd = new Date(new Date(dayStart).getTime() + 864e5).toISOString();
+    const taken = await db.list('facilitySlots', { where: [['resourceId', '==', r.id]], limit: 500 });
+    const stamps = new Set(taken.filter(t => t.end > dayStart && t.start < dayEnd).map(t => t.stamp));
+    const hours = []; for (let h = r.open; h < r.close; h++) hours.push(h);
+    const isoFor = h => zonedISO(state.date, `${String(h).padStart(2, '0')}:00`);
+    const stampOf = i => Rules.hourStamps(i, new Date(new Date(i).getTime() + 36e5).toISOString())[0];
+    const covered = state.kind === 'covered', canCover = f.participating && r.memberEligible;
+    const price = covered ? 0 : r.hourlyRate * state.hours;
+    $('#book-body').innerHTML = html`
+      <div class="field"><label for="bk-date">Date</label><select id="bk-date" data-change="bkDate">${dates.map(x => opt(x, fmtDay(zonedISO(x, '12:00')), state.date))}</select></div>
+      <div class="field mt"><span class="lab">Start time</span><div class="slots">${hours.map(h => { const i = isoFor(h), off = stamps.has(stampOf(i)) || i <= nowISO(); return html`<button type="button" class="slot ${state.hour === h ? 'on' : ''}" data-act="bkHour" data-h="${h}" ${off ? raw('disabled') : ''}>${String(h).padStart(2, '0')}:00</button>`; })}</div></div>
+      <div class="field mt"><span class="lab">Booking type</span><div class="checks">
+        ${canCover ? html`<label class="check"><input type="radio" name="bkkind" value="covered" data-change="bkKind" ${covered ? raw('checked') : ''}><span>Membership session</span></label>` : ''}
+        <label class="check"><input type="radio" name="bkkind" value="external" data-change="bkKind" ${state.kind === 'external' ? raw('checked') : ''}><span>External booking</span></label>
+        <label class="check"><input type="radio" name="bkkind" value="private" data-change="bkKind" ${state.kind === 'private' ? raw('checked') : ''}><span>Private booking</span></label></div></div>
+      ${covered ? '' : html`<div class="field mt"><label for="bk-len">Length</label><select id="bk-len" data-change="bkLen">${[1, 2, 3, 4].map(n => opt(n, `${n} hour${n > 1 ? 's' : ''}`, state.hours))}</select></div>`}
+      <div class="notice c-${covered ? 'green' : 'blue'} mt">${covered ? (S.period ? html`<b>No ground-access fee.</b> One session is reserved and used only if you check in. You have ${Rules.available(S.period)} available.` : html`This session needs an active membership. <a href="#/app/membership" style="text-decoration:underline" data-close>Activate membership</a>.`) : html`<b>${money(price)}</b>, paid at the venue. Not covered by membership.`}</div>`.s;
+    S.ui.bk = state; S.ui.bkDraw = draw;
+  };
+  S.ui.bkRes = r;
+  openModal({ title: `Book ${r.name}`, wide: true, body: html`<p class="small muted mb">${f.name}. Times shown in East Africa Time.</p><div id="book-body"></div>`, foot: html`<button class="btn btn-ghost" data-act="closeModal">Cancel</button><button class="btn btn-green" data-act="bkConfirm">Confirm booking</button>` });
+  await draw();
+};
+A.bkDate = (d, el) => { S.ui.bk.date = el.value; S.ui.bk.hour = null; S.ui.bkDraw(); };
+A.bkHour = d => { S.ui.bk.hour = Number(d.h); S.ui.bkDraw(); };
+A.bkKind = (d, el) => { S.ui.bk.kind = el.value; if (el.value === 'covered') S.ui.bk.hours = 1; S.ui.bkDraw(); };
+A.bkLen = (d, el) => { S.ui.bk.hours = Number(el.value); S.ui.bkDraw(); };
+A.bkConfirm = async () => {
+  const b = S.ui.bk, r = S.ui.bkRes;
+  if (b.hour === null) { toast('Choose a start time first.', 'yellow'); return; }
+  const start = zonedISO(b.date, `${String(b.hour).padStart(2, '0')}:00`), end = new Date(new Date(start).getTime() + b.hours * 36e5).toISOString();
+  try {
+    const res = await callOp('bookFacility', { resourceId: r.id, start, end, kind: b.kind });
+    closeModal(); await refreshSession();
+    toast(res.status === 'pending' ? 'Request sent. The venue will confirm.' : 'Booking confirmed.', 'green');
+    go('/app/bookings');
+  } catch (e) { showErr(e); if (e.code === 'slot-conflict') S.ui.bkDraw(); }
+};
+route('/facilities/:id', async ({ id }) => {
+  const f = await db.get('facilities', id);
+  if (!f || (f.status !== 'approved' && f.ownerId !== S.uid && !S.adminRole)) return notFound();
+  S.pageTitle = f.name;
+  const res = (await db.list('facilityResources', { where: [['facilityId', '==', id], ['active', '==', true]], limit: 30 }));
+  const reviews = await db.list('reviews', { where: [['targetType', '==', 'facility'], ['targetId', '==', id]], limit: 8 });
+  const games = await db.list('games', qUpcoming([['facilityId', '==', id]], 5));
+  return html`${pgHero({ c: 'green', c2: 'blue', eye: `${f.town}, ${f.county}`, title: f.name })}<div class="wrap section tight c-green">
+    <div class="grid g-7-5"><div class="layered rv l"><span class="blob b-green" style="width:50%;aspect-ratio:1;left:-3%;top:-5%"></span><span class="blob b-yellow" style="width:28%;aspect-ratio:1;right:0;bottom:0;--bd:2s"></span><span class="morph-pic r-169" style="display:block">${f.photos && f.photos[0] ? html`<img src="${f.photos[0]}" alt="Photograph of ${f.name}" loading="lazy">` : ''}</span></div>
+      <div class="stack"><div class="row">${f.verified ? verifiedMark() : html`<span class="badge warn">Awaiting verification</span>`}${f.participating ? html`<span class="badge ok">Participating SportsHub venue</span>` : html`<span class="badge">Not in the membership programme</span>`}</div>
+      ${f.reviewCount ? html`<div class="row sm">${stars(f.rating)}<span class="small muted">${f.rating} from ${f.reviewCount} reviews</span></div>` : ''}
+      <p class="muted">${f.description}</p>
+      <dl class="kv"><dt>Hours</dt><dd>${f.hours}</dd><dt>Sports</dt><dd>${(f.sportIds || []).map(x => SPORT(x).name).join(', ')}</dd><dt>Amenities</dt><dd>${(f.amenities || []).join(', ') || 'Not listed'}</dd>${f.lat || f.lng ? html`<dt>Map</dt><dd><a href="https://www.openstreetmap.org/?mlat=${f.lat}&mlon=${f.lng}#map=15/${f.lat}/${f.lng}" target="_blank" rel="noopener noreferrer" style="text-decoration:underline;text-underline-offset:3px">Open in OpenStreetMap ${ic('external-link')}</a></dd>` : ''}</dl></div></div>
+    <section class="section tight"><div class="panel"><div class="panel-head"><h2 style="font-size:1.3rem">Book a slot</h2></div>
+      ${(f.offers || []).map(o => html`<div class="notice c-green mb">${o.title}</div>`)}
+      ${res.length ? html`<div class="lines">${res.map(r => html`<div class="row between"><div style="min-width:0"><div class="semi">${r.name}</div><div class="small muted">${(r.sportIds || []).map(x => SPORT(x).name).join(', ')} · ${r.open}:00 to ${r.close}:00</div><div class="small">${money(r.hourlyRate)}/hr${f.participating && r.memberEligible ? html` · <span class="semi">Covered with membership</span>` : ''}</div></div><button class="btn btn-green btn-sm" data-act="openBooking" data-res="${r.id}">Check availability</button></div>`)}</div>` : html`<p class="muted small">No bookable spaces are listed yet.</p>`}
+    </div></section>
+    <div class="grid g2"><div class="panel"><h3 class="mb">Games here</h3>${games.length ? html`<div class="lines">${games.map(g => html`<div><a class="line-row" href="#/games/${g.id}"><span class="grow"><span class="t semi" style="display:block">${g.title}</span><span class="small muted">${fmtDT(g.start)}</span></span></a></div>`)}</div>` : html`<p class="small muted">No open games at this venue.</p>`}</div>
+    <div class="panel"><div class="panel-head"><h3>Reviews</h3>${S.uid ? html`<button class="btn btn-ghost btn-sm" data-act="writeReview" data-type="facility" data-id="${id}">Write a review</button>` : ''}</div>${reviews.length ? html`<div class="lines">${reviews.map(r => html`<div>${stars(r.rating)}<p class="small">${r.text}</p><span class="xs faint">${r.name}, ${fmtDate(r.at)}</span></div>`)}</div>` : html`<p class="small muted">No reviews yet.</p>`}</div></div>
+    ${f.rules ? html`<div class="panel mt-lg"><h3 class="mb">Facility rules</h3><p class="small muted">${f.rules}</p></div>` : ''}
+  </div>`;
+});
+</script>
+</body>
+</html>

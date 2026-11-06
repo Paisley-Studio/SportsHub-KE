@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Eight sessions a month, in any sport | SportsHub-KE</title>
+<meta name="description" content="KES 500 registration and KES 1,500 per month for eight sessions across every sport.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Eight sessions a month, in any sport | SportsHub-KE">
+<meta property="og:description" content="KES 500 registration and KES 1,500 per month for eight sessions across every sport.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { img, html, ic, money } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { S, SPORT, route, pgHero } from '/shared/js/ui.js';
+import { facilityPlace } from '/shared/js/features.js';
+
+/* ----- Membership (public explainer) ----- */
+route('/membership', async () => {
+  const s = S.settings, facs = await db.list('facilities', { where: [['status', '==', 'approved'], ['participating', '==', true]], limit: 12 });
+  const example = [['football', 2], ['basketball', 2], ['tennis', 1], ['athletics', 1], ['volleyball', 1], ['swimming', 1]];
+  return html`${pgHero({ c: 'green', c2: 'yellow', eye: 'SportsHub membership', title: 'Eight sessions a month, in any sport', lede: 'Your membership gives you access to participating grounds, with no extra ground-access fee on covered sessions.', cut: 'runner' })}<div class="wrap section tight"><div class="grid g-5-7"><div class="stack">
+      <div class="grid g2"><div class="panel"><div class="big-num" style="font-size:2rem">${money(s.registrationFee)}</div><p class="small muted">One-time registration. Paid once, never again at renewal.</p></div><div class="panel"><div class="big-num" style="font-size:2rem">${money(s.membershipFee)}</div><p class="small muted">Per month. ${s.sessionsPerPeriod} sessions, renewed when you choose.</p></div></div>
+      <a class="btn btn-green" href="${S.uid ? '#/app/membership' : '#/join'}" style="align-self:flex-start">${S.uid ? 'Manage my membership' : 'Join SportsHub'}</a></div>
+    <span class="pic r-43"><img src="${img('swim-race')}" alt="A swimmer mid-stroke in a competition lane" loading="lazy"></span></div>
+    <section class="section"><div class="panel"><h2 class="mb" style="font-size:1.3rem">One way to spend a month</h2><div class="meter pop" style="--n:8;max-width:640px">${example.flatMap(([id, n]) => Array.from({ length: n }, () => id)).map((_, i) => html`<div class="cred free" data-n="${i + 1}" style="animation-delay:${i * 60}ms"></div>`)}</div>
+      <div class="grid g3 mt">${example.map(([id, n]) => html`<div class="row sm small">${ic(SPORT(id).icon)} ${n} ${SPORT(id).name}</div>`)}</div></div></section>
+    <div class="grid g3">
+      <div class="panel"><h3 class="mb">When a session is used</h3><p class="small muted">Booking reserves a session. It is only spent when venue staff or the game host verify that you attended. Viewing or browsing never costs anything.</p></div>
+      <div class="panel"><h3 class="mb">Cancelling and no-shows</h3><p class="small muted">Cancel up to ${s.cancelWindowHours} hours before a session at no cost. Later cancellations and no-shows return your session but record a strike. ${s.strikeLimit} strikes in a month pause new bookings for ${s.restrictDays} days.</p></div>
+      <div class="panel"><h3 class="mb">Unused sessions</h3><p class="small muted">Unused sessions expire when your month ends and are recorded in your ledger. You can ask to transfer up to ${s.maxTransferCredits} to another active member before then, with administrator approval.</p></div>
+      <div class="panel"><h3 class="mb">What is not covered</h3><p class="small muted">Private bookings, organised events, tournament entry fees, venues outside the programme and any slot that is already taken. Access always depends on a venue having space.</p></div>
+      <div class="panel"><h3 class="mb">Refunds</h3><p class="small muted">If you cancel a month, unused sessions can be refunded pro rata by our finance team once no sessions are reserved.</p></div>
+      <div class="panel"><h3 class="mb">Your records</h3><p class="small muted">Every grant, reservation, attendance, transfer and expiry is kept in a ledger you can read at any time.</p></div></div>
+    <section class="section"><div class="panel"><div class="panel-head"><h3>Participating facilities</h3><a class="small semi" href="#/facilities?covered=1">See all</a></div>${facs.length ? facs.slice(0, 6).map(facilityPlace) : html`<p class="small muted">Participating venues will be listed here.</p>`}</div></section></div>`;
+}, { title: 'Membership', desc: 'KES 500 registration and KES 1,500 per month for eight sessions across every sport.' });
+</script>
+</body>
+</html>

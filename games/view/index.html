@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SportsHub-KE | One platform. Every sport. Every player.</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="SportsHub-KE | One platform. Every sport. Every player.">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, money, pct, fmtDay, fmtTime, scoreGame, Rules } from '/shared/js/core.js';
+import { db, callOp } from '/shared/js/firebase.js';
+import { S, SPORT, sportC, A, toast, badge, table, fld, confirmBox, promptForm, run, go, renderMain, notFound, route, refreshSession, pgHero } from '/shared/js/ui.js';
+import { spacesLeft } from '/shared/js/features.js';
+
+const gameAction = (g, mine, avail, left) => {
+  if (!S.uid) return html`<a class="btn btn-blue btn-block" href="#/signin">Sign in to join</a>`;
+  if (g.hostId === S.uid) return html`<span class="badge ok">You are hosting</span>`;
+  if (['attended', 'no_show'].includes(mine)) return badge(mine);
+  if (mine) return html`<div class="stack sm">${badge(mine)}<button class="btn btn-ghost btn-block" data-act="leaveGame" data-game="${g.id}">${mine === 'confirmed' ? 'Cancel my place' : 'Withdraw'}</button></div>`;
+  if (S.user.registrationStatus !== 'paid') return html`<a class="btn btn-block" href="#/app/membership">Complete registration to join</a>`;
+  if (g.covered && !S.period) return html`<a class="btn btn-green btn-block" href="#/app/membership">Activate membership to join</a>`;
+  if (g.covered && avail !== null && avail < 1 && left > 0) return html`<a class="btn btn-block" href="#/app/membership">No sessions left, view membership</a>`;
+  const label = g.approvalRequired ? 'Request to join' : left ? 'Join this game' : 'Join the waitlist';
+  return html`<button class="btn btn-block" style="background:var(--c);color:var(--con)" data-act="joinGame" data-game="${g.id}">${label}</button>`;
+};
+A.joinGame = async d => {
+  const r = await callOp('joinGame', { gameId: d.game });
+  await refreshSession();
+  toast({ confirmed: 'You are in. One session reserved.', requested: 'Request sent to the host.', waitlist: 'Added to the waitlist.' }[r.status], 'green');
+  renderMain();
+};
+A.leaveGame = async d => { if (await confirmBox('Cancel your place?', `Free up to ${S.settings.cancelWindowHours} hours before the start. Later cancellations of covered sessions record a strike. No credit is deducted either way.`, 'Cancel my place', 'btn-bad')) await run('leaveGame', { gameId: d.game }, 'Your place was cancelled. Your session was returned.').catch(() => {}); };
+A.reviewJoin = d => run('reviewJoinRequest', { gameId: d.game, uid: d.uid, approve: !!d.v }, d.v ? 'Request approved.' : 'Request declined.').catch(() => {});
+A.markAttend = d => run('markGameAttendance', { gameId: d.game, uid: d.uid, attended: !!d.v }, d.v ? 'Attendance recorded. One session was used.' : 'Marked as no-show. No credit was used.').catch(() => {});
+A.inviteFriend = async d => {
+  const v = await promptForm({ title: 'Invite a friend', intro: 'Enter their SportsHub ID. They will get a notification with a link to this game.', fields: fld({ name: 'memberId', label: 'SportsHub ID', required: true, placeholder: 'SH-KE-001234', full: true }), submit: 'Send invitation' });
+  if (!v) return;
+  await run('inviteToGame', { gameId: d.game, memberId: v.memberId }, 'Invitation sent.').catch(() => {});
+};
+A.openGameChat = async d => { const r = await callOp('startConversation', { type: 'game', gameId: d.game }); go(`/app/messages/${r.id}`); };
+route('/games/:id', async ({ id }) => {
+  const g = await db.get('games', id);
+  if (!g) return notFound();
+  S.pageTitle = g.title;
+  const s = SPORT(g.sportId), me = S.uid ? await db.get('gameParticipants', `${id}_${S.uid}`) : null, isHost = g.hostId === S.uid;
+  const people = S.uid ? await db.list('gameParticipants', { where: [['gameId', '==', id]], limit: 200 }) : [];
+  const confirmed = people.filter(p => ['confirmed', 'attended', 'no_show'].includes(p.status)), waiting = people.filter(p => p.status === 'waitlist'), requests = people.filter(p => p.status === 'requested');
+  const fac = g.facilityId ? await db.get('facilities', g.facilityId) : null, isStaff = fac && S.uid && (fac.ownerId === S.uid || (fac.staffIds || []).includes(S.uid));
+  const canMark = isHost || isStaff, past = new Date(g.end) < new Date(), left = spacesLeft(g), mine = me && !['cancelled'].includes(me.status) ? me.status : null;
+  const m = S.profile ? scoreGame(g, S.profile, S.origin) : null;
+  const avail = S.period ? Rules.available(S.period) : null;
+  return html`${pgHero({ c: s.color || 'blue', c2: 'yellow', eye: `${s.name}${g.format ? ` · ${g.format}` : ''}`, title: g.title, lede: `${fmtDay(g.start)}, ${fmtTime(g.start)} · ${g.venueName || g.town}` })}<div class="wrap section tight ${sportC(g.sportId)}"><a class="small muted" href="#/games">${ic('arrow-left')} All games</a>
+    <div class="grid g-side mt"><div class="stack lg">
+      <div class="stack sm">${g.status === 'cancelled' ? html`<div class="notice c-magenta">This game has been cancelled.</div>` : ''}</div>
+      <dl class="kv"><dt>When</dt><dd>${fmtDay(g.start)}, ${fmtTime(g.start)} to ${fmtTime(g.end)} (EAT)</dd><dt>Where</dt><dd>${g.facilityId ? html`<a href="#/facilities/${g.facilityId}" style="text-decoration:underline;text-underline-offset:3px">${g.venueName}</a>` : g.venueName || g.town}${g.town ? `, ${g.town}` : ''}</dd><dt>Level</dt><dd>${g.skill}</dd><dt>Host</dt><dd><a href="#/players/${g.hostId}" style="text-decoration:underline;text-underline-offset:3px">${g.hostName}</a></dd><dt>Cost</dt><dd>${g.covered ? 'Covered session, no ground-access fee for members' : g.fee ? '' : 'No fee listed'}${g.fee ? ` ${money(g.fee)} participation fee, paid to the host` : ''}</dd></dl>
+      ${g.rules ? html`<div class="panel"><h3 class="mb">Rules</h3><p class="muted">${g.rules}</p></div>` : ''}
+      ${S.uid ? html`
+      <div class="panel"><div class="panel-head"><h3>Confirmed players (${confirmed.length})</h3>${past || !canMark ? '' : html`<span class="small muted">Record attendance on the day</span>`}</div>
+        ${table([{ h: 'Player', v: p => html`<a class="semi" href="#/players/${p.uid}">${p.name}</a>` }, { h: 'Status', v: p => badge(p.status) }, ...(canMark ? [{ h: '', act: true, v: p => p.status === 'confirmed' ? html`<button class="btn btn-sm btn-green" data-act="markAttend" data-game="${id}" data-uid="${p.uid}" data-v="1">Attended</button><button class="btn btn-sm btn-ghost" data-act="markAttend" data-game="${id}" data-uid="${p.uid}" data-v="">No-show</button>` : '' }] : [])], confirmed)}</div>
+      ${requests.length && isHost ? html`<div class="panel"><div class="panel-head"><h3>Join requests (${requests.length})</h3></div><div class="lines">${requests.map(p => html`<div class="row between"><span class="semi">${p.name}</span><span class="row sm"><button class="btn btn-sm" data-act="reviewJoin" data-game="${id}" data-uid="${p.uid}" data-v="1">Approve</button><button class="btn btn-sm btn-ghost" data-act="reviewJoin" data-game="${id}" data-uid="${p.uid}" data-v="">Decline</button></span></div>`)}</div></div>` : ''}
+      ${waiting.length ? html`<div class="panel"><h3 class="mb">Waitlist (${waiting.length})</h3><p class="small muted">${waiting.map(p => p.name).join(', ')}</p></div>` : ''}` : html`<p class="small muted">Sign in to see who is playing.</p>`}
+    </div>
+    <aside class="stack" style="position:sticky;top:88px">
+      <div class="panel stack">
+        <div class="row between"><span class="semi" style="font-size:1.1rem">${left ? `${left} places left` : 'Full'}</span><span class="small muted">${g.joined}/${g.capacity}</span></div>
+        <div class="bar"><i style="width:${pct(g.joined, g.capacity)}%"></i></div>
+        ${m && m.reasons.length ? html`<div class="small"><span class="fit">${m.score}% match</span><div class="why">${m.reasons.join(' · ')}</div></div>` : ''}
+        ${g.status === 'open' && !past ? gameAction(g, mine, avail, left) : html`<span class="small muted">This game is ${past ? 'over' : g.status}.</span>`}
+        ${g.covered ? html`<p class="small muted">Joining reserves one session. It is only used if you attend. Cancel at least ${S.settings.cancelWindowHours} hours before to avoid a strike.</p>` : ''}
+        ${S.uid ? html`<div class="row sm"><button class="btn btn-ghost btn-sm" data-act="inviteFriend" data-game="${id}">${ic('user-plus')} Invite</button>${mine === 'confirmed' || isHost ? html`<button class="btn btn-ghost btn-sm" data-act="openGameChat" data-game="${id}">${ic('message-square')} Chat</button>` : ''}<button class="btn btn-ghost btn-sm" data-act="reportThing" data-type="post" data-id="${id}" data-text="${g.title}">${ic('flag')} Report</button></div>` : ''}
+        ${isHost && g.status === 'open' ? html`<button class="btn btn-bad btn-sm" data-act="cancelGame" data-game="${id}">Cancel this game</button>` : ''}
+      </div></aside></div></div>`;
+});
+</script>
+</body>
+</html>

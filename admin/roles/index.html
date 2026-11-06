@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Roles and permissions | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Roles and permissions | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, titleCase, fmtDate, Rules } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { S, A, toast, table, fld, confirmBox, promptForm, run, route } from '/shared/js/ui.js';
+import { pageHead, adminPage, adminView } from '/shared/js/features.js';
+
+adminView.roles = async () => {
+  const rows = await db.list('adminRoles', { limit: 50 });
+  const perms = [...new Set(Object.values(Rules.ADMIN_ROLES).flatMap(r => r.perms))].filter(p => p !== '*');
+  return html`${pageHead('Roles and permissions', 'Only a Super Administrator can assign roles.', html`<button class="btn" data-act="assignRole">${ic('user-plus')} Assign a role</button>`)}
+   <section class="panel mb"><h3 class="mb">Administrators</h3>${table([{ h: 'Name', v: a => html`<span class="semi">${a.name}</span>` }, { h: 'Role', v: a => Rules.ADMIN_ROLES[a.role].label }, { h: 'Assigned', v: a => fmtDate(a.at) }, { h: '', act: true, v: a => (a.uid || a.id) !== S.uid ? html`<button class="btn btn-sm btn-ghost" data-act="revokeRole" data-uid="${a.uid || a.id}">Revoke</button>` : html`<span class="xs faint">You</span>` }], rows)}</section>
+   <section class="panel"><h3 class="mb">Permission matrix</h3><div style="overflow-x:auto;position:relative"><table class="tbl" style="min-width:880px"><thead><tr><th>Role</th>${perms.map(p => html`<th style="font-size:.7rem">${titleCase(p)}</th>`)}</tr></thead><tbody>${Object.entries(Rules.ADMIN_ROLES).map(([k, r]) => html`<tr><td class="semi small">${r.label}</td>${perms.map(p => html`<td style="text-align:center">${Rules.can(k, p) ? ic('check') : ''}<span class="sr">${Rules.can(k, p) ? 'Yes' : 'No'}</span></td>`)}</tr>`)}</tbody></table></div></section>`;
+};
+A.assignRole = async () => {
+  const v = await promptForm({ title: 'Assign an administrator role', fields: html`${fld({ name: 'memberId', label: 'SportsHub ID', required: true, placeholder: 'SH-KE-001234', full: true })}${fld({ name: 'role', label: 'Role', type: 'select', required: true, options: Object.entries(Rules.ADMIN_ROLES).map(([k, r]) => [k, r.label]), full: true })}`, submit: 'Assign role' });
+  if (!v) return;
+  const u = await db.list('users', { where: [['memberId', '==', v.memberId.trim().toUpperCase()]], limit: 1 });
+  if (!u.length) { toast('No member with that ID.', 'magenta'); return; }
+  await run('assignAdminRole', { uid: u[0].id, role: v.role }, 'Role assigned.').catch(() => {});
+};
+A.revokeRole = async d => { if (await confirmBox('Revoke this role?', 'They lose administrator access immediately.', 'Revoke', 'btn-bad')) await run('assignAdminRole', { uid: d.uid, role: null }, 'Role revoked.').catch(() => {}); };
+route('/admin/roles', adminPage('roles'), { shell: 'app', auth: true, admin: true, title: "Roles and permissions" });
+</script>
+</body>
+</html>

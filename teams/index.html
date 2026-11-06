@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Find your team | SportsHub-KE</title>
+<meta name="description" content="Teams and clubs recruiting across Kenya.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Find your team | SportsHub-KE">
+<meta property="og:description" content="Teams and clubs recruiting across Kenya.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { COUNTY_NAMES, SKILLS, html, raw, ic, scoreTeam } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { S, emptyState, route, pgHero } from '/shared/js/ui.js';
+import { teamLine, filterSelect } from '/shared/js/features.js';
+
+/* ----- Teams ----- */
+route('/teams', async () => {
+  const q = S.query, where = [];
+  if (q.sport) where.push(['sportId', '==', q.sport]);
+  if (q.county) where.push(['county', '==', q.county]);
+  let rows = await db.list('teams', { where, limit: 60 });
+  if (q.skill) rows = rows.filter(t => t.skill === q.skill);
+  if (q.recruiting) rows = rows.filter(t => t.recruiting);
+  if (S.profile) rows = rows.map(t => ({ ...t, _m: scoreTeam(t, S.profile) })).sort((a, b) => b._m.score - a._m.score);
+  return html`${pgHero({ c: 'green', c2: 'blue', eye: 'Teams and clubs', title: 'Find your team', lede: S.profile ? 'Ranked by your sport, county, level and the positions teams need.' : 'Teams and clubs recruiting across the country.', cut: 'guard', action: html`<a class="btn btn-green" href="#/app/teams/new">${ic('plus')} Register a team</a>` })}<div class="wrap section tight">
+    <div class="grid mb" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px">${filterSelect('sport', 'Sport', q.sport, S.sports.map(s => [s.id, s.name]), 'Every sport')}${filterSelect('county', 'County', q.county, COUNTY_NAMES, 'All counties')}${filterSelect('skill', 'Level', q.skill, SKILLS, 'Any level')}<label class="tick" style="align-self:end;padding-bottom:10px"><input type="checkbox" name="recruiting" data-filter ${q.recruiting ? raw('checked') : ''}><span>Recruiting now</span></label></div>
+    ${rows.length ? html`<div class="panel lines">${rows.map(t => html`<div class="seq">${teamLine(t, t._m && t._m.reasons)}</div>`)}</div>` : emptyState('users', 'No teams match', 'Try a nearby county, or register your own team.')}
+  </div>`;
+}, { title: 'Teams', desc: 'Teams and clubs recruiting across Kenya.' });
+</script>
+</body>
+</html>

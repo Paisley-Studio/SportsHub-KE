@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Session-credit management | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Session-credit management | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, titleCase, timeAgo, Rules } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { A, table, fld, promptForm, run, route } from '/shared/js/ui.js';
+import { pageHead, adminPage, adminView } from '/shared/js/features.js';
+
+adminView.credits = async () => {
+  const [periods, ledger] = await Promise.all([db.list('membershipPeriods', { where: [['status', '==', 'active']], limit: 300 }), db.list('membershipLedger', { orderBy: ['at', 'desc'], limit: 60 })]);
+  const names = await db.list('users', { limit: 300 }), nm = id => (names.find(u => u.id === id) || { name: id }).name;
+  return html`${pageHead('Session-credit management', 'Every change creates a ledger entry. Balances can never go negative.')}<div class="grid g2"><section class="panel"><h3 class="mb">Active balances</h3>${table([{ h: 'Member', v: p => nm(p.uid) }, { h: 'Used', right: true, v: p => p.used }, { h: 'Held', right: true, v: p => p.held }, { h: 'Left', right: true, v: p => Rules.remaining(p) }, { h: '', act: true, v: p => html`<button class="btn btn-sm btn-ghost" data-act="adjustCredit" data-uid="${p.uid}">Adjust</button>` }], periods)}</section>
+  <section class="panel"><h3 class="mb">Latest ledger entries</h3>${table([{ h: 'When', v: l => timeAgo(l.at) }, { h: 'Member', v: l => nm(l.uid) }, { h: 'Entry', v: l => titleCase(l.type) }, { h: 'Change', right: true, v: l => l.delta || '' }, { h: 'Balance', right: true, v: l => l.balanceAfter }], ledger)}</section></div>`;
+};
+A.adjustCredit = async d => { const v = await promptForm({ title: 'Adjust session credits', intro: 'This action is audited.', fields: html`${fld({ name: 'delta', label: 'Change, positive or negative', type: 'number', min: -8, max: 8, required: true })}${fld({ name: 'reason', label: 'Reason', required: true })}`, submit: 'Apply' }); if (v) await run('adjustCredits', { uid: d.uid, ...v }, 'Credits adjusted.').catch(() => {}); };
+route('/admin/credits', adminPage('credits'), { shell: 'app', auth: true, admin: true, title: "Session-credit management" });
+</script>
+</body>
+</html>

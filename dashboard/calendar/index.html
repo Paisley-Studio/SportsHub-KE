@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Calendar | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Calendar | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, raw, ic, titleCase, fmt, fmtDay, fmtTime, fmtDT, dayKey, zonedISO, Rules } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, A, openModal, setQuery } from '/shared/js/ui.js';
+import { nowISO, appRoute, pageHead } from '/shared/js/features.js';
+
+/* ----- Calendar: every role sees its own activities ----- */
+const EVENT_KIND = { game: ['Games', 'blue'], booking: ['Bookings', 'green'], training: ['Training', 'yellow'], fixture: ['Fixtures', 'green'], tournament: ['Tournaments', 'yellow'], membership: ['Membership', 'magenta'], maintenance: ['Maintenance', 'magenta'], order: ['Orders', 'magenta'], promotion: ['Promotions', 'blue'] };
+const calendarEvents = async () => {
+  const ev = [], add = (kind, title, start, end, link, detail) => ev.push({ kind, title, start, end: end || start, link, detail });
+  const r = S.activeRole;
+  if (['player', 'captain', 'coach', 'scout'].includes(r) || !r) {
+    const sb = await db.list('sessionBookings', { where: [['uid', '==', S.uid], ['status', 'in', ['held', 'consumed']]], limit: 200 });
+    sb.forEach(s => add(s.source === 'game' ? 'game' : 'booking', s.title, s.start, s.end, s.source === 'game' ? `/games/${s.sourceId}` : '/app/bookings', s.covered ? 'Covered session' : 'Not covered'));
+    const tr = await db.list('trainingSessions', { where: [['members', 'array-contains', S.uid]], limit: 100 });
+    tr.forEach(t => add('training', t.title, t.start, t.end, '/app/calendar', t.venue));
+    const regs = await db.list('tournamentRegistrations', { where: [['by', '==', S.uid]], limit: 50 });
+    regs.forEach(x => add('tournament', x.tournamentName, x.start, x.start, `/tournaments/${x.tournamentId}`, titleCase(x.status)));
+    if (S.period) add('membership', 'Membership renewal due', S.period.end, S.period.end, '/app/membership', `${Rules.remaining(S.period)} sessions left`);
+    const myTeams = (S.profile && S.profile.teamIds) || [];
+    if (myTeams.length) (await db.list('fixtures', { where: [['teamIds', 'array-contains-any', myTeams.slice(0, 10)]], limit: 100 })).forEach(f => add('fixture', `${f.homeName} v ${f.awayName}`, f.start, f.start, f.tournamentId ? `/tournaments/${f.tournamentId}` : '/app/team/fixtures', f.venue));
+  }
+  if (r === 'captain' || r === 'coach') {
+    const owned = await db.list('trainingSessions', { where: [['createdBy', '==', S.uid]], limit: 100 });
+    owned.forEach(t => { if (!ev.some(e => e.title === t.title && e.start === t.start)) add('training', t.title, t.start, t.end, r === 'coach' ? '/app/coach/training' : '/app/team/training', t.venue); });
+  }
+  if (r === 'facility') (await db.list('facilityBookings', { where: [['ownerId', '==', S.uid]], limit: 300 })).filter(b => !['cancelled', 'rejected'].includes(b.status)).forEach(b => add(b.kind === 'maintenance' ? 'maintenance' : 'booking', `${b.resourceName}: ${b.kind === 'maintenance' ? b.note : b.userName}`, b.start, b.end, '/app/facility/bookings', b.facilityName));
+  if (r === 'vendor') {
+    (await db.list('orders', { where: [['vendorId', '==', S.uid]], limit: 100 })).forEach(o => add('order', `Order ${o.number}`, o.createdAt, o.createdAt, '/app/store/orders', titleCase(o.status)));
+    (await db.list('advertisingCampaigns', { where: [['ownerId', '==', S.uid]], limit: 30 })).filter(a => a.status === 'active').forEach(a => add('promotion', `Campaign ends: ${a.title}`, a.end, a.end, '/app/ads', a.business));
+  }
+  if (r === 'organiser') {
+    const ts = await db.list('tournaments', { where: [['organiserId', '==', S.uid]], limit: 50 });
+    ts.forEach(t => add('tournament', t.name, t.start, t.start, `/tournaments/${t.id}`, t.venue));
+    for (const t of ts.slice(0, 10)) (await db.list('fixtures', { where: [['tournamentId', '==', t.id]], limit: 100 })).forEach(f => add('fixture', `${f.homeName} v ${f.awayName}`, f.start, f.start, `/tournaments/${t.id}`, t.name));
+  }
+  return ev;
+};
+A.calMonth = d => setQuery({ m: d.v });
+A.calKind = (d, el) => { const off = new Set((S.query.hide || '').split(',').filter(Boolean)); if (el.checked) off.delete(d.k); else off.add(d.k); setQuery({ hide: [...off].join(',') }); };
+A.calDay = d => {
+  const rows = S.ui.calByDay[d.k] || [];
+  openModal({ title: fmtDay(zonedISO(d.k, '12:00')), body: rows.length ? html`<div class="stack sm day-list">${rows.map(e => html`<a class="cal-e c-${EVENT_KIND[e.kind][1]}" href="#${e.link}" data-close><span class="semi">${fmtTime(e.start)}${e.end !== e.start ? ` to ${fmtTime(e.end)}` : ''}</span> ${e.title}<br><span class="small muted">${e.detail || ''}</span></a>`)}</div>` : html`<p class="muted">Nothing scheduled on this day.</p>` }).then(() => {});
+};
+appRoute('/app/calendar', async () => {
+  const today = new Date(), todayKey = dayKey(today), ym = S.query.m || todayKey.slice(0, 7), [y, m] = ym.split('-').map(Number);
+  const first = new Date(Date.UTC(y, m - 1, 1)), startOffset = (first.getUTCDay() + 6) % 7, days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const all = await calendarEvents();
+  const kinds = [...new Set(all.map(e => e.kind))], off = new Set((S.query.hide || '').split(',').filter(Boolean));
+  const ev = all.filter(e => !off.has(e.kind)).sort((a, b) => a.start > b.start ? 1 : -1);
+  const byDay = {}; ev.forEach(e => { (byDay[dayKey(e.start)] = byDay[dayKey(e.start)] || []).push(e); });
+  S.ui.calByDay = byDay;
+  const cells = [];
+  for (let i = 0; i < startOffset; i++) cells.push(html`<div class="cal-d off" aria-hidden="true"></div>`);
+  for (let d = 1; d <= days; d++) {
+    const key = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`, rows = byDay[key] || [];
+    cells.push(html`<button class="cal-d ${key === todayKey ? 'today' : ''}" data-act="calDay" data-k="${key}" aria-label="${fmtDay(zonedISO(key, '12:00'))}, ${rows.length} events"><span class="dn">${d}</span>${rows.slice(0, 3).map(e => html`<span class="cal-e c-${EVENT_KIND[e.kind][1]}">${fmtTime(e.start)} ${e.title}</span>`)}${rows.length > 3 ? html`<span class="xs faint">+${rows.length - 3} more</span>` : ''}</button>`);
+  }
+  const prev = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7), next = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 7);
+  const soon = ev.filter(e => e.start > nowISO()).slice(0, 8);
+  return page(pageHead('Calendar', 'All times are in East Africa Time.'), html`<div class="grid g-side"><div>
+    <div class="row between mb"><div class="row sm"><button class="icon-btn" data-act="calMonth" data-v="${prev}" aria-label="Previous month">${ic('chevron-left')}</button><h2 style="font-size:1.2rem;min-width:170px;text-align:center">${fmt(zonedISO(`${ym}-15`, '12:00'), { month: 'long', year: 'numeric' })}</h2><button class="icon-btn" data-act="calMonth" data-v="${next}" aria-label="Next month">${ic('chevron-right')}</button><button class="btn btn-ghost btn-sm" data-act="calMonth" data-v="${todayKey.slice(0, 7)}">Today</button></div>
+      <div class="checks">${kinds.map(k => html`<label class="check c-${EVENT_KIND[k][1]}"><input type="checkbox" data-change="calKind" data-k="${k}" ${off.has(k) ? '' : raw('checked')}><span>${EVENT_KIND[k][0]}</span></label>`)}</div></div>
+    <div class="cal">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => html`<div class="cal-h">${d}</div>`)}${cells}</div></div>
+    <aside class="panel"><h3 class="mb">Reminders: coming up</h3>${soon.length ? html`<div class="lines">${soon.map(e => html`<div><a class="line-row" href="#${e.link}"><span class="grow"><span class="t semi small" style="display:block">${e.title}</span><span class="xs faint">${fmtDT(e.start)}</span></span></a></div>`)}</div>` : html`<p class="small muted">Nothing scheduled.</p>`}</aside></div>`);
+}, 'Calendar');
+</script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Reach people who play | SportsHub-KE</title>
+<meta name="description" content="Advertising and sponsorship across SportsHub-KE.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Reach people who play | SportsHub-KE">
+<meta property="og:description" content="Advertising and sponsorship across SportsHub-KE.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { img, AD_PLACEMENTS, html, ic } from '/shared/js/core.js';
+import { S, route, pgHero } from '/shared/js/ui.js';
+
+/* ----- Advertise ----- */
+route('/advertise', async () => html`${pgHero({ c: 'magenta', c2: 'yellow', eye: 'Advertising and sponsorship', title: 'Reach people who play', lede: 'Campaigns are reviewed by our team, targeted by county and sport, and measured honestly. Advertising never interrupts a booking.' })}<div class="wrap section tight"><div class="grid g-5-7"><div class="stack"><a class="btn btn-magenta" href="${S.uid ? '#/app/ads' : '#/signin'}" style="align-self:flex-start">Start a campaign</a></div><span class="pic r-169"><img src="${img('basketball-crowd')}" alt="A basketball game with a crowd watching" loading="lazy"></span></div>
+    <div class="panel section tight"><h3 class="mb">Available placements</h3><div class="grid g3">${Object.values(AD_PLACEMENTS).map(l => html`<div class="row sm small">${ic('layout-template')} ${l}</div>`)}</div></div></div>`, { title: 'Advertise', desc: 'Advertising and sponsorship across SportsHub-KE.' });
+</script>
+</body>
+</html>

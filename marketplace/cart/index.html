@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Your cart | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Your cart | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { CATEGORY_ICON, html, ic, money } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { S, A, emptyState, renderMain, route, pgHero } from '/shared/js/ui.js';
+import { saveCart } from '/shared/js/features.js';
+
+A.cartQty = async d => { const i = S.cart[Number(d.i)]; i.qty += Number(d.d); if (i.qty < 1) S.cart.splice(Number(d.i), 1); await saveCart(); renderMain(); };
+route('/cart', async () => {
+  const items = await Promise.all(S.cart.map(async (i, idx) => ({ ...i, idx, p: await db.get('products', i.productId) })));
+  const live = items.filter(i => i.p), total = live.reduce((a, i) => a + (i.p.salePrice || i.p.price) * i.qty, 0);
+  return html`${pgHero({ c: 'magenta', c2: 'blue', eye: 'Marketplace', title: 'Your cart' })}<div class="wrap section tight c-magenta">
+    ${live.length ? html`<div class="grid g-side"><div class="lines tbl-wrap">${live.map(i => html`<div class="row nowrap" style="align-items:flex-start"><div class="prod" style="width:84px;flex:none"><div class="pic" style="margin:0">${i.p.photo ? html`<img src="${i.p.photo}" alt="">` : html`<span class="noimg">${ic(CATEGORY_ICON[i.p.category] || 'package')}</span>`}</div></div>
+        <div class="grow"><a class="semi" href="#/marketplace/product/${i.p.id}">${i.p.title}</a><div class="small muted">${[i.size, i.colour].filter(Boolean).join(' · ')} · ${i.p.storeName}</div>
+        <div class="row between mt"><div class="qty"><button data-act="cartQty" data-i="${i.idx}" data-d="-1" aria-label="Decrease quantity">${ic('minus')}</button><span>${i.qty}</span><button data-act="cartQty" data-i="${i.idx}" data-d="1" aria-label="Increase quantity">${ic('plus')}</button></div><span class="price">${money((i.p.salePrice || i.p.price) * i.qty)}</span></div></div></div>`)}</div>
+      <aside class="panel stack"><div class="row between"><span>Subtotal</span><span class="price">${money(total)}</span></div><p class="small muted">Delivery is arranged directly with each seller.</p>
+        <a class="btn btn-magenta btn-block" href="#/checkout">Continue to checkout</a></aside></div>` : emptyState('shopping-bag', 'Your cart is empty', 'Browse boots, kits and equipment from verified sellers.', html`<a class="btn" href="#/marketplace">Visit the marketplace</a>`)}</div>`;
+}, { title: 'Cart', auth: true });
+</script>
+</body>
+</html>

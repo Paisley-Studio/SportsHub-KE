@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Notifications | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Notifications | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, raw, ic, timeAgo } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, A, toast, emptyState, go, setQuery, renderMain } from '/shared/js/ui.js';
+import { appRoute, pageHead } from '/shared/js/features.js';
+
+A.ntfFilter = d => setQuery({ f: d.v === 'all' ? '' : d.v });
+A.openNotif = async d => { await db.update('notifications', d.id, { read: true }); go(d.link); };
+A.markAllRead = async () => {
+  const rows = await db.list('notifications', { where: [['uid', '==', S.uid], ['read', '==', false]], limit: 50 });
+  await Promise.all(rows.map(n => db.update('notifications', n.id, { read: true })));
+  toast('All caught up.'); renderMain();
+};
+/* ----- Notifications ----- */
+appRoute('/app/notifications', async () => {
+  const prefs = (S.user && S.user.notifPrefs) || {}, filter = S.query.f || 'all';
+  let rows = await db.list('notifications', { where: [['uid', '==', S.uid]], orderBy: ['at', 'desc'], limit: S.ui.ntfLimit || 40 });
+  rows = rows.filter(n => prefs[n.type] !== false);
+  if (filter === 'unread') rows = rows.filter(n => !n.read);
+  return page(pageHead('Notifications', '', html`<button class="btn btn-ghost btn-sm" data-act="markAllRead">Mark all read</button>`),
+    html`<div class="tabs" role="tablist"><button class="tab ${filter === 'all' ? 'on' : ''}" data-act="ntfFilter" data-v="all">All</button><button class="tab ${filter === 'unread' ? 'on' : ''}" data-act="ntfFilter" data-v="unread">Unread</button></div>`,
+    rows.length ? html`<div class="lines">${rows.map(n => html`<div><a class="line-row" href="#${n.link || '/app'}" data-act="openNotif" data-id="${n.id}" data-link="${n.link || '/app'}"><span class="avatar sm sq">${ic(({ game: 'calendar-days', booking: 'ticket', membership: 'badge-check', payment: 'receipt', team: 'users', challenge: 'swords', transfer: 'arrow-left-right', tournament: 'trophy', order: 'shopping-bag', advertising: 'megaphone', verification: 'shield-check', announcement: 'megaphone', social: 'heart', coach: 'clipboard-list', scouting: 'search' })[n.type] || 'bell')}</span><span class="grow"><span class="${n.read ? '' : 'strong'}" style="display:block">${n.title}</span><span class="small muted">${n.body}</span></span><span class="xs faint">${timeAgo(n.at)}</span>${n.read ? '' : raw('<i class="dot-on" aria-label="Unread"></i>')}</a></div>`)}</div>` : emptyState('bell', 'All caught up', 'New activity will appear here.'));
+}, 'Notifications');
+</script>
+</body>
+</html>

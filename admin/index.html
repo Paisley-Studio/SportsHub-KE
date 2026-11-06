@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Command centre | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Command centre | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, money, pct, fmt, titleCase, timeAgo, Rules } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { S, canAdmin, table, route, barChart, hbars, dashHero } from '/shared/js/ui.js';
+import { nowISO, lastMonths, monthLabel, adminPage, adminView } from '/shared/js/features.js';
+
+/* ----- Command centre: what needs a decision first, then the state of the platform ----- */
+adminView.overview = async () => {
+  const c = (col, where) => db.count(col, where ? { where } : undefined);
+  const [users, teams, coaches, pendingC, facs, activeF, pendingF, vendors, pendingV, products, pendingP, games, tours, members, disputes, openReports, transfers, pendingAds] = await Promise.all([
+    c('users'), c('teams'), c('coaches', [['verified', '==', true]]), c('coachApplications', [['status', '==', 'pending']]), c('facilities'), c('facilities', [['participating', '==', true]]), c('facilities', [['status', '==', 'pending']]), c('vendors'), c('vendors', [['status', '==', 'pending']]), c('products'), c('products', [['status', '==', 'pending']]),
+    c('games', [['status', '==', 'open'], ['start', '>=', nowISO()]]), c('tournaments', [['status', '==', 'open']]), c('memberships', [['status', '==', 'active']]), canAdmin('orders') ? c('orders', [['status', '==', 'disputed']]) : 0, c('reports', [['status', '==', 'open']]), c('membershipTransfers', [['status', '==', 'awaiting_approval']]), c('advertisingCampaigns', [['status', '==', 'submitted']])
+  ]);
+  const canPay = canAdmin('payments') || canAdmin('settlements') || S.adminRole === 'platform';
+  let finance = '';
+  if (canPay) {
+    const [pays, orders, sets, ads] = await Promise.all([db.list('paymentTransactions', { where: [['status', '==', 'success']], limit: 2000 }), db.list('orders', { where: [['status', 'in', ['paid', 'processing', 'shipped', 'delivered', 'completed']]], limit: 2000 }), db.list('facilitySettlements', { limit: 300 }), db.list('advertisingCampaigns', { limit: 300 })]);
+    const reg = pays.filter(p => p.type === 'registration').reduce((a, p) => a + p.amount, 0), mem = pays.filter(p => p.type === 'membership').reduce((a, p) => a + p.amount, 0), comm = orders.reduce((a, o) => a + (o.commission || 0), 0), adv = ads.reduce((a, x) => a + (x.bookedRevenue || 0), 0), settle = sets.reduce((a, s) => a + s.amount, 0);
+    const simulated = pays.filter(p => p.simulated).length;
+    const series = lastMonths(6).map(k => { const m = pays.filter(p => (p.completedAt || '').slice(0, 7) === k); return { l: monthLabel(k), v: m.filter(p => ['registration', 'membership'].includes(p.type)).reduce((a, p) => a + p.amount, 0) }; });
+    const parts = [['Membership', mem, 'var(--green)'], ['Registration', reg, 'var(--blue)'], ['Advertising', adv, 'var(--yellow)'], ['Commission', comm, 'var(--magenta)']], tot = parts.reduce((a, p) => a + p[1], 0);
+    finance = html`<section><div class="blk-h"><h2>Revenue</h2>${simulated ? html`<span class="tag sim">${simulated} simulated payment${simulated === 1 ? '' : 's'} included</span>` : html`<span class="k">All time</span>`}</div>
+      <div class="figs mb"><div><b>${money(mem)}</b><span>Membership</span></div><div><b>${money(reg)}</b><span>Registration</span></div><div><b>${money(comm)}</b><span>Marketplace commission</span></div><div><b>${money(adv)}</b><span>Advertising booked</span></div><div><b>${money(settle)}</b><span>Facility settlements</span></div></div>
+      <div class="grid g2"><div class="panel"><div class="panel-head"><h3>Membership and registration income</h3><span class="small muted">Six months</span></div>${barChart(series, { c: 'var(--bk)', fmtV: v => v >= 1000 ? `${Math.round(v / 1000)}K` : v })}</div>
+        <div class="panel"><div class="panel-head"><h3>Revenue mix</h3></div>${tot ? html`<div class="stackbar" role="img" aria-label="${parts.map(p => `${p[0]}: ${money(p[1])}`).join(', ')}">${parts.filter(p => p[1]).map((p, i) => html`<i style="width:${p[1] / tot * 100}%;background:${p[2]};animation-delay:${i * 90}ms" title="${p[0]}: ${money(p[1])}"></i>`)}</div>
+          <div class="side-list mt small">${parts.map(p => html`<div class="row between"><span class="row sm"><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${p[2]}"></i>${p[0]}</span><span class="nums"><b>${money(p[1])}</b> <span class="faint">${pct(p[1], tot)}%</span></span></div>`)}</div>` : html`<p class="small muted">No completed payments yet.</p>`}</div></div></section>`;
+  }
+  const [recent, byCounty] = await Promise.all([canAdmin('audit') ? db.list('auditLogs', { orderBy: ['at', 'desc'], limit: 10 }) : [], db.list('playerProfiles', { limit: 400 })]);
+  const cty = {}; byCounty.forEach(p => { if (p.county) cty[p.county] = (cty[p.county] || 0) + 1; });
+  const queue = [['Coach applications', 'Review qualifications and players', pendingC, '/admin/coaches', 'verify'], ['Facilities to verify', 'Check venue details and settlement terms', pendingF, '/admin/facilities', 'facilities'], ['Session transfers to approve', 'Credits held in escrow', transfers, '/admin/transfers', 'transfers'], ['Open reports', 'Reported posts, messages and listings', openReports, '/admin/mod-feed', 'moderation'], ['Campaigns to review', 'Advertising waiting for approval', pendingAds, '/admin/ads', 'ads'], ['Vendors to verify', 'Store applications', pendingV, '/admin/vendors', 'vendors'], ['Products to moderate', 'New marketplace listings', pendingP, '/admin/moderation-products', 'marketplace'], ...(canAdmin('orders') ? [['Order disputes', 'Buyers and sellers waiting on a decision', disputes, '/admin/orders', 'orders']] : [])]
+    .filter(q => canAdmin(q[4])).sort((a, b) => b[2] - a[2]);
+  const waiting = queue.reduce((a, q) => a + q[2], 0), hour = Number(fmt(new Date(), { hour: 'numeric', hourCycle: 'h23' }));
+  return html`${dashHero({ c: 'blue', kick: 'Command centre', title: `${hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'}, ${S.user.name.split(' ')[0]}.`, sub: html`<span>${Rules.ADMIN_ROLES[S.adminRole].label}</span><span>${fmt(new Date(), { weekday: 'long', day: 'numeric', month: 'long' })}</span><span>${waiting ? `${waiting} item${waiting === 1 ? '' : 's'} waiting for a decision` : 'Nothing waiting for a decision'}</span>`, action: canAdmin('reports') ? html`<a class="btn btn-ghost" href="#/admin/reports">${ic('download')} Reports and exports</a>` : '' })}
+    <div class="dgrid"><div class="dcol">
+      <section><div class="blk-h"><h2>Needs a decision</h2><span class="k">Most waiting first</span></div><div class="queue">${queue.map(([t, s, n, href]) => html`<a class="qi ${n ? 'hot' : 'zero'}" href="#${href}"><div style="min-width:0"><div class="q-t">${t}</div><div class="q-s">${s}</div></div><span class="q-n" data-countup>${n}</span>${ic('arrow-right')}</a>`)}</div></section>
+      <section><div class="blk-h"><h2>Platform</h2><span class="k">Live counts</span></div>
+        <div class="figs"><a href="#/admin/users"><b data-countup>${users}</b><span>Registered users</span></a><a href="#/admin/membership"><b data-countup>${members}</b><span>Active memberships</span></a><a href="#/admin/teams"><b data-countup>${teams}</b><span>Teams</span></a><a href="#/admin/coaches"><b data-countup>${coaches}</b><span>Verified coaches</span></a></div>
+        <div class="figs" style="margin-top:-1px;border-top-left-radius:0;border-top-right-radius:0"><a href="#/admin/facilities"><b>${activeF}/${facs}</b><span>Participating facilities</span></a><a href="#/admin/games"><b data-countup>${games}</b><span>Open games</span></a><a href="#/admin/tournaments"><b data-countup>${tours}</b><span>Open tournaments</span></a><a href="#/admin/products"><b data-countup>${products}</b><span>Products, ${vendors} vendors</span></a></div></section>
+      ${finance}
+    </div><aside class="dcol" style="gap:28px">
+      <div class="panel"><div class="panel-head"><h3>Players by county</h3><span class="small muted">Top 8</span></div>${Object.keys(cty).length ? hbars(Object.entries(cty).sort((a, b) => b[1] - a[1]).slice(0, 8), 'var(--blue)') : html`<p class="small muted">Appears once players register.</p>`}</div>
+      ${canAdmin('audit') ? html`<div><div class="blk-h"><span class="k">Recent activity</span><a href="#/admin/audit">Audit log</a></div><div class="side-list small">${recent.length ? recent.map(l => html`<div class="row between nowrap"><span class="clip">${titleCase(l.action.replace('.', ' '))} <span class="faint">${l.target || ''}</span></span><span class="xs faint" style="flex:none">${timeAgo(l.at)}</span></div>`) : html`<p class="muted">No activity recorded yet.</p>`}</div></div>` : ''}
+      <div><div class="blk-h"><span class="k">Shortcuts</span></div><div class="side-list small">${[['config', 'System configuration', 'settings'], ['sports', 'Sports and disciplines', 'volleyball'], ['announce', 'Send an announcement', 'bell-ring'], ['roles', 'Roles and permissions', 'key-round']].filter(x => canAdmin(x[0] === 'announce' ? 'notifications' : x[0])).map(([m, l, i]) => html`<a class="line-row" href="#/admin/${m}">${ic(i)}<span class="t semi grow">${l}</span>${ic('arrow-right')}</a>`)}</div></div>
+    </aside></div>`;
+};
+route('/admin', adminPage('overview'), { shell: 'app', auth: true, admin: true, title: 'Command centre' });
+</script>
+</body>
+</html>

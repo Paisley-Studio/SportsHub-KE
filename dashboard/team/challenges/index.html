@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Challenges | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Challenges | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, fmtDT, dayKey, zonedISO } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, A, toast, badge, emptyState, fld, promptForm, run } from '/shared/js/ui.js';
+import { appRoute, pageHead, captainTeam, noTeam, teamTabs } from '/shared/js/features.js';
+
+A.newChallenge = async d => {
+  const t = await db.get('teams', d.t), others = (await db.list('teams', { where: [['sportId', '==', t.sportId]], limit: 60 })).filter(x => x.id !== t.id);
+  if (!others.length) { toast(`No other ${t.sportName} teams to challenge yet.`, 'yellow'); return; }
+  const v = await promptForm({ title: 'Challenge a team', wide: true, fields: html`${fld({ name: 'toTeamId', label: 'Opponent', type: 'select', required: true, options: others.map(x => [x.id, `${x.name}, ${x.town}`]), full: true })}${fld({ name: 'date', label: 'Proposed date', type: 'date', required: true, min: dayKey(new Date()) })}${fld({ name: 'time', label: 'Preferred time', type: 'time', value: '15:00', required: true })}${fld({ name: 'venue', label: 'Venue' })}${fld({ name: 'format', label: 'Game format', value: t.format })}${fld({ name: 'terms', label: 'Additional terms', type: 'textarea', full: true })}`, submit: 'Send challenge', tone: 'btn-green' });
+  if (v) await run('createChallenge', { fromTeamId: t.id, toTeamId: v.toTeamId, sportId: t.sportId, start: zonedISO(v.date, v.time), venue: v.venue, format: v.format, terms: v.terms }, 'Challenge sent.').catch(() => {});
+};
+A.challengeTo = d => run('respondChallenge', { id: d.id, action: d.v }, d.v === 'accept' ? 'Accepted. The fixture is on the calendar.' : 'Declined.').catch(() => {});
+A.challengeCounter = async d => {
+  const v = await promptForm({ title: 'Propose another date', fields: html`${fld({ name: 'date', label: 'Date', type: 'date', required: true, min: dayKey(new Date()) })}${fld({ name: 'time', label: 'Time', type: 'time', value: '15:00', required: true })}`, submit: 'Send proposal' });
+  if (v) await run('respondChallenge', { id: d.id, action: 'counter', start: zonedISO(v.date, v.time) }, 'New date proposed.').catch(() => {});
+};
+appRoute('/app/team/challenges', async () => {
+  const { team: t, mine } = await captainTeam(); if (!t) return noTeam();
+  const rows = (await db.list('challenges', { where: [['officials', 'array-contains', S.uid]], orderBy: ['createdAt', 'desc'], limit: 40 }));
+  return page(pageHead('Team challenges', 'Propose a match. The other captain can accept, decline or suggest another date.', html`<button class="btn btn-green" data-act="newChallenge" data-t="${t.id}">${ic('swords')} Challenge a team</button>`), teamTabs(t, mine),
+    rows.length ? html`<div class="stack lg">${rows.map(c => { const yours = c.status === 'pending' && mine.some(x => x.id === c.awaitingTeamId); return html`<article class="panel"><div class="panel-head"><h3>${c.fromName} v ${c.toName}</h3>${badge(c.status)}</div><dl class="kv small"><dt>Proposed</dt><dd>${fmtDT(c.start)}</dd><dt>Venue</dt><dd>${c.venue || 'To be agreed'}</dd><dt>Format</dt><dd>${c.format || 'Open'}</dd>${c.terms ? html`<dt>Terms</dt><dd>${c.terms}</dd>` : ''}</dl>
+      <details class="small mt"><summary class="semi" style="cursor:pointer">History</summary><ul class="stack sm mt muted">${c.history.map(h => html`<li>${h.by}: ${h.action}, ${fmtDT(h.start)}</li>`)}</ul></details>
+      ${yours ? html`<div class="row mt"><button class="btn btn-sm btn-green" data-act="challengeTo" data-id="${c.id}" data-v="accept">Accept</button><button class="btn btn-sm btn-ghost" data-act="challengeCounter" data-id="${c.id}">Propose another date</button><button class="btn btn-sm btn-ghost" data-act="challengeTo" data-id="${c.id}" data-v="decline">Decline</button></div>` : c.status === 'pending' ? html`<p class="small muted mt">Waiting for the other captain.</p>` : ''}</article>`; })}</div>` : emptyState('swords', 'No challenges yet', 'Find a rival and set a date.'));
+}, 'Challenges');
+</script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Statistics | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Statistics | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { fmtHtml, html, ic, $, titleCase, fmtDate, dayKey, zonedISO } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, SPORT, A, emptyState, metrics, table, fld, sportOptions, promptForm, run } from '/shared/js/ui.js';
+import { appRoute, pageHead } from '/shared/js/features.js';
+
+A.addStat = async () => {
+  const sid = (S.profile && S.profile.sports[0]) || 'football';
+  const fieldsFor = id => SPORT(id).statFields.map(f => fld({ name: `f_${f.key}`, label: `${f.label}${f.unit ? ` (${f.unit})` : ''}`, type: f.type === 'number' ? 'number' : 'text', min: f.type === 'number' ? 0 : undefined, step: 'any' }));
+  S.ui.statFieldsFor = fieldsFor;
+  const v = await promptForm({ title: 'Add a statistics record', intro: 'This will show as self-reported until verified.', fields: html`${fld({ name: 'sportId', label: 'Sport', type: 'select', value: sid, options: sportOptions(), onchange: 'statSport' })}${fld({ name: 'date', label: 'Date', type: 'date', value: dayKey(new Date()), required: true })}<div class="form-grid full" id="stat-fields">${fieldsFor(sid)}</div>${fld({ name: 'note', label: 'Note', full: true, placeholder: 'Event or match' })}`, submit: 'Save record' });
+  if (!v) return;
+  const fields = {}; Object.keys(v).filter(k => k.startsWith('f_')).forEach(k => { fields[k.slice(2)] = v[k]; });
+  await run('addStat', { sportId: v.sportId, date: zonedISO(v.date, '12:00'), note: v.note, fields }, 'Record saved.').catch(() => {});
+};
+A.statSport = (d, el) => { $('#stat-fields').innerHTML = fmtHtml(S.ui.statFieldsFor(el.value)); };
+appRoute('/app/stats', async () => {
+  const rows = await db.list('playerStatistics', { where: [['uid', '==', S.uid]], orderBy: ['date', 'desc'], limit: 40 });
+  const bySport = {};
+  rows.forEach(r => { const b = bySport[r.sportId] = bySport[r.sportId] || {}; Object.entries(r.fields).forEach(([k, v]) => { if (typeof v === 'number') b[k] = (b[k] || 0) + v; }); });
+  return page(pageHead('Statistics', 'Each sport tracks what matters in that sport. Verified records carry more weight with scouts.', html`<button class="btn btn-blue" data-act="addStat">${ic('plus')} Add a record</button>`),
+    html`<div class="stack xl">${Object.entries(bySport).map(([sid, b]) => { const s = SPORT(sid); return html`<section><div class="eyebrow c-blue mb">${s.name}</div>${metrics(Object.entries(b).map(([k, v]) => [v, (s.statFields.find(f => f.key === k) || {}).label || titleCase(k)]))}</section>`; })}
+    <section class="panel"><h3 class="mb">All records</h3>${table([{ h: 'Date', v: s => fmtDate(s.date) }, { h: 'Sport', v: s => SPORT(s.sportId).name }, { h: 'Record', v: s => Object.entries(s.fields).map(([k, v]) => `${(SPORT(s.sportId).statFields.find(f => f.key === k) || {}).label || titleCase(k)}: ${v}`).join(' · ') }, { h: 'Note', v: s => s.note || '' }, { h: 'Source', v: s => s.source === 'verified' ? html`<span class="verified">${ic('badge-check')} Verified</span>` : html`<span class="badge">Self-reported</span>` }], rows, emptyState('chart-column', 'No records yet', 'Add your first result. A coach or organiser can verify it.'))}</section></div>`);
+}, 'Statistics');
+</script>
+</body>
+</html>

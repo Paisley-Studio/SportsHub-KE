@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dashboard | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Dashboard | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, raw, ic, $, $$, pct, fmt, fmtDate, fmtTime, fmtDay, dayKey, timeAgo, scoreGame, scoreTeam, Rules } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, SPORT, sportC, badge, avatar, emptyState, go, route, ROLE_HOME, adSlot, dashHero, onMount, rewriteLinks } from '/shared/js/ui.js';
+import { qUpcoming, nowISO, gameRow, teamLine, coachLine, facilityPlace, productCard, membershipCard } from '/shared/js/features.js';
+
+/* The single most useful next action, worked out from this member's real state. */
+const nextBestStep = (upcoming, teams, pendingT) => {
+  const step = (c, icon, t, d, href, label) => html`<a class="next-step c-${c}" href="${href}"><span class="ns-i">${ic(icon)}</span><span class="grow"><span class="semi" style="display:block">${t}</span><span class="small muted">${d}</span></span><span class="btn btn-sm btn-ghost hide-m">${label}</span></a>`;
+  const m = S.membership, p = S.period;
+  if (pendingT) return step('green', 'arrow-left-right', 'Sessions offered to you', 'Another member wants to transfer sessions to you.', '#/app/transfers', 'Review');
+  if (m && m.registrationStatus !== 'paid') return '';
+  if (!p) return '';
+  const left = Rules.available(p), daysLeft = Math.ceil((new Date(p.end) - Date.now()) / 864e5);
+  if (left === 0) return step('yellow', 'badge-check', 'All your sessions are booked or used', `Your next month starts after ${fmtDate(p.end)}.`, '#/app/membership', 'Renew');
+  if (daysLeft <= 7 && left > 1) return step('magenta', 'clock', `${left} sessions expire in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`, 'Use them before your month ends, or transfer them to a teammate.', '#/games?covered=1', 'Use a session');
+  if (!upcoming.length) return step('blue', 'calendar-check', 'Nothing booked yet', `You have ${left} session${left === 1 ? '' : 's'} ready. Covered games are one click away.`, '#/games?covered=1', 'Find a game');
+  if (teams.length && !(S.profile.teamIds || []).length) return step('green', 'users', `${teams[0].t.name} could use you`, teams[0].m.reasons.join(' · '), `#/teams/${teams[0].t.id}`, 'See team');
+  return '';
+};
+/* Seven days from today, with this member's games on the day they happen. */
+const weekStrip = items => {
+  const days = Array.from({ length: 7 }, (_, i) => new Date(Date.now() + i * 864e5)), today = dayKey(new Date());
+  return html`<div class="week">${days.map(d => { const k = dayKey(d), ev = items.filter(u => dayKey(u.start) === k); return html`<div class="wd ${k === today ? 'today' : ''}"><div class="h">${fmt(d, { weekday: 'short' })}<b>${fmt(d, { day: 'numeric' })}</b></div>${ev.length ? ev.map((u, i) => html`<a class="ev ${sportC(u.sportId)}" style="animation-delay:${i * 60}ms" href="#/games/${u.gameId}" title="${u.title}"><b>${fmtTime(u.start)}</b><span>${u.title}</span></a>`) : html`<span class="none">Free</span>`}</div>`; })}</div>`;
+};
+/* How complete the public profile is, and the one thing that would improve it most. */
+const profileStrength = p => {
+  const checks = [[!!(S.user.photo || p.photo), 'Add a profile photo'], [(p.sports || []).length > 0, 'Choose your sports'], [!!p.bio, 'Write a short bio'], [(p.availability || []).length > 0, 'Share when you can play'], [Object.keys(p.positions || {}).length > 0, 'Add your position'], [(p.achievements || []).length > 0, 'Add an achievement']];
+  const done = checks.filter(c => c[0]).length, missing = checks.find(c => !c[0]);
+  return { score: pct(done, checks.length), tip: missing ? missing[1] : 'Your profile is complete' };
+};
+const playerHome = async () => {
+  const prof = S.profile || { sports: [], county: S.user.county };
+  const [mine, games, teams, coaches, facs, products, stats, notifs, ad, transfers] = await Promise.all([
+    db.list('gameParticipants', { where: [['uid', '==', S.uid], ['status', 'in', ['confirmed', 'waitlist', 'requested']]], limit: 30 }),
+    db.list('games', qUpcoming([], 30)), db.list('teams', { where: [['recruiting', '==', true]], limit: 30 }), db.list('coaches', { where: [['verified', '==', true], ['accepting', '==', true]], limit: 12 }),
+    db.list('facilities', { where: [['status', '==', 'approved'], ['participating', '==', true]], limit: 12 }), db.list('products', { where: [['status', '==', 'active']], limit: 40 }),
+    db.list('playerStatistics', { where: [['uid', '==', S.uid]], limit: 20 }), db.list('notifications', { where: [['uid', '==', S.uid]], orderBy: ['at', 'desc'], limit: 5 }), adSlot('player_dash'),
+    db.list('membershipTransfers', { where: [['participants', 'array-contains', S.uid]], limit: 5 })
+  ]);
+  const upcoming = mine.filter(m => m.start > nowISO()).sort((a, b) => a.start > b.start ? 1 : -1);
+  const ranked = [...games].filter(g => !mine.some(m => m.gameId === g.id)).map(g => ({ g, m: scoreGame(g, prof, S.origin) })).sort((a, b) => b.m.score - a.m.score);
+  const tmR = teams.filter(t => !(prof.teamIds || []).includes(t.id)).map(t => ({ t, m: scoreTeam(t, prof) })).sort((a, b) => b.m.score - a.m.score).slice(0, 3);
+  const prodR = products.filter(p => !p.sportId || (prof.sports || []).includes(p.sportId)).slice(0, 4);
+  const coachR = [...new Map(coaches.filter(c => (c.sports || []).some(s => (prof.sports || []).includes(s))).concat(coaches).map(c => [c.id, c])).values()].slice(0, 3);
+  const facR = [...new Map(facs.filter(f => f.county === prof.county).concat(facs).map(f => [f.id, f])).values()].slice(0, 3);
+  const verified = stats.filter(s => s.source === 'verified').length;
+  const pendingT = transfers.filter(t => t.toUid === S.uid && t.status === 'awaiting_recipient').length;
+  const hc = SPORT((prof.sports || [])[0]).color || 'blue', next = nextBestStep(upcoming, tmR, pendingT), strength = profileStrength(prof);
+  const first = S.user.name.split(' ')[0], hour = Number(fmt(new Date(), { hour: 'numeric', hourCycle: 'h23' }));
+  const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const mySports = (prof.sports || []).filter(id => ranked.some(r => r.g.sportId === id));
+
+  /* Recommendation filter: switching sport re-ranks the list in place. */
+  onMount(root => {
+    const box = $('#recs', root); if (!box) return;
+    const list = $('.board', box), btns = $$('.filt', box);
+    btns.forEach(b => b.addEventListener('click', () => {
+      btns.forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+      const rows = (b.dataset.s ? ranked.filter(r => r.g.sportId === b.dataset.s) : ranked).slice(0, 5);
+      list.classList.add('swap-out');
+      setTimeout(() => { list.innerHTML = rows.length ? rows.map(r => gameRow(r.g).s).join('') : emptyState('calendar-days', 'Nothing in this sport yet', 'Check back soon, or host a game yourself.').s; rewriteLinks(list); list.classList.remove('swap-out', 'swap-in'); void list.offsetWidth; list.classList.add('swap-in'); }, 200);
+    }));
+  });
+
+  return page(dashHero({ c: hc, kick: greet, title: `Hello, ${first}.`, sub: html`<span>${ic('id-card')} ${S.user.memberId}</span>${prof.county ? html`<span>${ic('map-pin')} ${prof.town ? `${prof.town}, ` : ''}${prof.county}</span>` : ''}${(prof.sports || []).length ? html`<span>${(prof.sports || []).slice(0, 3).map(x => SPORT(x).name).join(' · ')}</span>` : ''}`, action: html`<a class="btn" href="#/games">${ic('search')} Find a game</a><a class="btn btn-ghost" href="#/players/${S.uid}">My profile</a>` }),
+    next,
+    html`<div class="dgrid"><div class="dcol">
+      ${membershipCard(true)}
+      <section><div class="blk-h"><h2>This week</h2><a href="#/app/calendar">Calendar</a></div>${weekStrip(upcoming)}</section>
+      <section class="panel"><div class="panel-head"><h3>Your next games</h3><a href="#/app/games">All your games</a></div>
+        ${upcoming.length ? html`<div class="agenda">${upcoming.slice(0, 4).map((u, i) => html`<a class="ag ${i === 0 ? 'soon' : ''} ${sportC(u.sportId)}" href="#/games/${u.gameId}"><span class="dt"><b>${fmt(u.start, { day: 'numeric' })}</b><span>${fmt(u.start, { month: 'short' })}</span></span><span class="what"><b>${u.title}</b><span>${fmtDay(u.start)}, ${fmtTime(u.start)}${u.covered ? ' · Covered session' : ''}</span></span>${badge(u.status)}</a>`)}</div>`
+          : html`<p class="small muted">Nothing booked yet. The games below fit your sports, level and area.</p>`}</section>
+      <section id="recs" class="c-${hc}"><div class="blk-h"><h2>Recommended for you</h2><a href="#/games">Browse all</a></div>
+        ${mySports.length > 1 ? html`<div class="filters mb" role="group" aria-label="Filter recommendations"><button class="filt" data-s="" aria-pressed="true">All your sports</button>${mySports.map(id => html`<button class="filt ${sportC(id)}" data-s="${id}" aria-pressed="false"><span class="dot"></span>${SPORT(id).name}</button>`)}</div>` : ''}
+        <div class="board">${ranked.length ? ranked.slice(0, 5).map(r => gameRow(r.g)) : emptyState('calendar-days', 'No matching games yet', 'Check back soon, or host your own.', html`<a class="btn" href="#/app/games/new">Host a game</a>`)}</div></section>
+      ${ad}
+      ${prodR.length ? html`<section><div class="blk-h"><h2>For your sport</h2><a href="#/marketplace">Marketplace</a></div><div class="prods">${prodR.map(productCard)}</div></section>` : ''}
+    </div><aside class="dcol" style="gap:28px">
+      <div class="panel"><div class="row nowrap" style="gap:14px">${avatar(S.user.name, S.user.photo)}<div class="grow"><div class="semi">${S.user.name}</div><div class="small muted">${prof.skill || 'Recreational'}${(prof.positions && Object.values(prof.positions)[0]) ? ` · ${Object.values(prof.positions)[0]}` : ''}</div></div></div>
+        <div class="mt"><div class="row between small"><span class="muted">Profile strength</span><b class="nums">${strength.score}%</b></div><div class="bar mt" style="margin-top:8px"><i style="width:${strength.score}%;background:var(--green)"></i></div><p class="xs faint" style="margin-top:8px">${strength.tip}</p></div>
+        <div class="row mt"><a class="btn btn-ghost btn-sm" href="#/app/profile">Edit profile</a><a class="btn btn-ghost btn-sm" href="#/app/stats">Statistics</a></div>
+        <dl class="kv small mt"><dt>Records</dt><dd>${stats.length}</dd><dt>Verified</dt><dd>${verified}</dd><dt>Achievements</dt><dd>${(prof.achievements || []).length}</dd></dl></div>
+      <div><div class="blk-h"><span class="k">Notifications</span><a href="#/app/notifications">All</a></div><div class="side-list">${notifs.length ? notifs.map(n => html`<a class="small" href="#${n.link || '/app/notifications'}"><span class="${n.read ? '' : 'semi'}" style="display:block">${n.read ? '' : raw('<span class="dot-on" style="background:var(--magenta);margin-right:8px;vertical-align:1px"></span>')}${n.title}</span><span class="xs faint">${timeAgo(n.at)}</span></a>`) : html`<p class="small muted">You are all caught up.</p>`}</div></div>
+      ${tmR.length ? html`<div><div class="blk-h"><span class="k">Teams that need you</span><a href="#/teams">Teams</a></div><div class="side-list">${tmR.map(({ t, m }) => html`<div>${teamLine(t, m.reasons)}</div>`)}</div></div>` : ''}
+      ${coachR.length ? html`<div><div class="blk-h"><span class="k">Coaches taking players</span><a href="#/coaches">Coaches</a></div><div class="side-list">${coachR.map(c => html`<div>${coachLine(c)}</div>`)}</div></div>` : ''}
+      ${facR.length ? html`<div><div class="blk-h"><span class="k">Membership venues${prof.county ? ` near ${prof.county}` : ''}</span></div>${facR.map(facilityPlace)}</div>` : ''}
+    </aside></div>`);
+};
+/* ----- Player home ----- */
+route('/app', async () => {
+  const r = S.activeRole;
+  if (r === 'admin') { go('/admin', true); return undefined; }
+  if (r !== 'player' && ROLE_HOME[r]) { go(ROLE_HOME[r], true); return undefined; }
+  return playerHome();
+}, { shell: 'app', auth: true, title: 'Dashboard' });
+</script>
+</body>
+</html>

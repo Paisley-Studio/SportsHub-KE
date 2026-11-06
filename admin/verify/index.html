@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Account verification | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Account verification | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, titleCase } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { A, badge, table, run, route } from '/shared/js/ui.js';
+import { pageHead, adminPage, adminView, decisionPrompt, REVIEW_OPTS } from '/shared/js/features.js';
+
+adminView.verify = async () => {
+  const [reqs, minors] = await Promise.all([db.list('verificationRequests', { limit: 100 }), db.list('playerProfiles', { where: [['isMinor', '==', true]], limit: 100 })]);
+  const open = reqs.filter(r => ['pending', 'info_required'].includes(r.status));
+  return html`${pageHead('Account verification', 'Organisers, scouts and guardian consent.')}
+   <section class="panel mb"><h3 class="mb">Organisation and scout applications</h3>${table([{ h: 'Applicant', v: r => html`<span class="semi">${r.orgName}</span><br><span class="xs faint">${r.name}</span>` }, { h: 'Type', v: r => titleCase(r.kind) }, { h: 'Credentials', v: r => r.credentials || r.description }, { h: 'Status', v: r => badge(r.status) }, { h: '', act: true, v: r => html`<button class="btn btn-sm" data-act="reviewVerify" data-id="${r.id}">Review</button>` }], open, html`<p class="small muted">Nothing waiting.</p>`)}</section>
+   <section class="panel"><h3 class="mb">Guardian consent</h3>${table([{ h: 'Player', v: p => html`<span class="semi">${p.name}</span>` }, { h: 'Age band', v: p => p.ageBand }, { h: 'Consent', v: p => p.guardianVerified ? badge('approved') : badge('pending') }, { h: '', act: true, v: p => html`<button class="btn btn-sm ${p.guardianVerified ? 'btn-ghost' : 'btn-green'}" data-act="reviewGuardian" data-uid="${p.id}" data-v="${p.guardianVerified ? '' : '1'}">${p.guardianVerified ? 'Withdraw' : 'Confirm consent'}</button>` }], minors, html`<p class="small muted">No players under 18.</p>`)}</section>`;
+};
+A.reviewVerify = async d => { const v = await decisionPrompt('Review application', '', REVIEW_OPTS.slice(0, 3)); if (v) await run('reviewVerification', { id: d.id, ...v }, 'Decision recorded.').catch(() => {}); };
+A.reviewGuardian = d => run('reviewGuardianConsent', { uid: d.uid, approve: !!d.v }, 'Consent updated.').catch(() => {});
+route('/admin/verify', adminPage('verify'), { shell: 'app', auth: true, admin: true, title: "Account verification" });
+</script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Find anything in sport | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Find anything in sport | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic } from '/shared/js/core.js';
+import { S, A, emptyState, setQuery, route, SEARCH_SOURCES, searchAll, pgHero } from '/shared/js/ui.js';
+
+A.searchType = d => setQuery({ type: d.v });
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-search-page]')) setQuery({ q: e.target.value.trim() }); });
+/* ----- Search ----- */
+route('/search', async () => {
+  const q = S.query.q || '';
+  const groups = q ? await searchAll(q, 8, S.query.type) : [];
+  return html`${pgHero({ c: 'blue', c2: 'green', eye: 'Search', title: 'Find anything in sport' })}<div class="wrap section tight"><div class="search-box" style="max-width:640px" role="search">${ic('search')}<input type="search" value="${q}" placeholder="Search players, teams, coaches, venues, products" data-search-page aria-label="Search" style="height:46px"></div>
+    <div class="checks mt">${['', ...SEARCH_SOURCES.map(s => s.label)].map(l => html`<button class="btn btn-sm ${S.query.type === l || (!S.query.type && !l) ? '' : 'btn-ghost'}" data-act="searchType" data-v="${l}">${l || 'Everything'}</button>`)}</div>
+    <div class="stack xl mt-lg">${q ? (groups.length ? groups.map(g => html`<section class="panel"><h3 class="mb">${g.label}</h3><div class="lines">${g.rows.map(x => html`<div><a class="line-row" href="#${g.href(x)}">${ic(g.icon)}<span class="grow"><span class="t semi" style="display:block">${g.t(x)}</span><span class="small muted">${g.s(x)}</span></span></a></div>`)}</div></section>`) : emptyState('search-x', `No results for "${q}"`, 'Try a shorter word, a place or a sport.')) : html`<p class="muted">Type a name, sport or place. Use the slash key to jump to search from anywhere.</p>`}</div></div>`;
+}, { title: 'Search' });
+</script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Profile | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Profile | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { AVAILABILITY, GAME_TYPES, SKILLS, html } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, F, fld, countyTown, sportOptions, run } from '/shared/js/ui.js';
+import { appRoute, pageHead } from '/shared/js/features.js';
+
+F.saveProfile = async v => {
+  const lines = s => String(s || '').split('\n').map(x => x.trim()).filter(Boolean);
+  const positions = { ...(S.profile && S.profile.positions) }; if (v.position && v.sports[0]) positions[v.sports[0]] = v.position;
+  const payload = { ...v, positions, achievements: lines(v.achievements), personalBests: lines(v.personalBests), certificates: lines(v.certificates), media: lines(v.media) };
+  delete payload.position;
+  await run('updateProfile', payload, 'Profile saved.');
+};
+/* ----- Profile & settings ----- */
+appRoute('/app/profile', async () => {
+  const p = S.profile || {}, priv = await db.get('usersPrivate', S.uid), u = S.user;
+  return page(pageHead('Profile', `Your SportsHub ID is ${u.memberId}.`, html`<a class="btn btn-ghost" href="#/players/${S.uid}">View public profile</a>`), html`<form class="form" style="max-width:820px" data-form="saveProfile"><div class="form-grid">
+    ${fld({ name: 'name', label: 'Full name', value: u.name, required: true })}${fld({ name: 'phone', label: 'Phone', type: 'tel', value: (priv && priv.phone) || '', hint: 'Never shown publicly.' })}
+    ${countyTown({ county: u.county, town: u.town })}${fld({ name: 'area', label: 'General playing area', value: p.area || '', hint: u.isMinor ? 'Not stored for players under 18.' : 'A general area only.' })}${fld({ name: 'photo', label: 'Profile photograph', type: 'image', value: u.photo || '' })}
+    ${fld({ name: 'bio', label: 'Short bio', type: 'textarea', value: p.bio || '', full: true })}
+    ${fld({ name: 'sports', label: 'Preferred sports', type: 'checks', value: p.sports || [], options: sportOptions(), full: true })}
+    ${fld({ name: 'position', label: 'Main position', value: (p.positions && p.sports && p.positions[p.sports[0]]) || '' })}${fld({ name: 'skill', label: 'Skill level', type: 'select', value: p.skill, options: SKILLS })}
+    ${fld({ name: 'availability', label: 'Availability', type: 'checks', value: p.availability || [], options: AVAILABILITY, full: true })}
+    ${fld({ name: 'gameTypes', label: 'Preferred game types', type: 'checks', value: p.gameTypes || [], options: GAME_TYPES, full: true })}
+    ${u.isMinor ? html`<div class="notice c-yellow full small">Your profile is protected because you are under 18. ${p.guardianVerified ? 'Guardian consent is verified.' : 'Guardian consent is awaiting verification.'}</div>` : fld({ name: 'visibility', label: 'Profile visibility', type: 'select', value: p.visibility, options: [['public', 'Public: anyone can find me'], ['members', 'Members only'], ['private', 'Private: only me']], full: true })}
+    ${fld({ name: 'achievements', label: 'Achievements, one per line', type: 'textarea', value: (p.achievements || []).join('\n'), full: true })}${fld({ name: 'personalBests', label: 'Personal bests, one per line', type: 'textarea', value: (p.personalBests || []).join('\n') })}${fld({ name: 'certificates', label: 'Certificates, one per line', type: 'textarea', value: (p.certificates || []).join('\n') })}${fld({ name: 'media', label: 'Highlight video links, one per line', type: 'textarea', value: (p.media || []).join('\n'), full: true })}
+    </div><p class="form-err err hide"></p><button class="btn" type="submit" style="justify-self:start">Save profile</button></form>`);
+}, 'Profile');
+</script>
+</body>
+</html>

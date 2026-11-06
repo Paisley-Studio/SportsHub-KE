@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Availability and maintenance | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Availability and maintenance | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, fmt, fmtDT, dayKey, zonedISO } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, A, badge, table, fld, promptForm, run } from '/shared/js/ui.js';
+import { appRoute, pageHead, facilityGate, facSwitch } from '/shared/js/features.js';
+
+A.blockSlot = async d => {
+  const res = await db.list('facilityResources', { where: [['facilityId', '==', d.f], ['active', '==', true]], limit: 30 });
+  const v = await promptForm({ title: 'Block a slot', wide: true, fields: html`${fld({ name: 'resourceId', label: 'Space', type: 'select', required: true, options: res.map(r => [r.id, r.name]), full: true })}${fld({ name: 'date', label: 'Date', type: 'date', required: true, min: dayKey(new Date()) })}${fld({ name: 'reason', label: 'Reason', value: 'Maintenance' })}${fld({ name: 'from', label: 'From', type: 'time', value: '06:00', step: '3600', required: true })}${fld({ name: 'to', label: 'To', type: 'time', value: '09:00', step: '3600', required: true })}`, submit: 'Block slot', tone: 'btn-green' });
+  if (v) await run('blockSlot', { resourceId: v.resourceId, start: zonedISO(v.date, v.from), end: zonedISO(v.date, v.to), reason: v.reason }, 'Slot blocked.').catch(() => {});
+};
+appRoute('/app/facility/maintenance', async () => {
+  const { f, mine, gate } = await facilityGate(); if (gate) return gate;
+  const [res, rows] = await Promise.all([db.list('facilityResources', { where: [['facilityId', '==', f.id], ['active', '==', true]], limit: 30 }), db.list('facilityBookings', { where: [['ownerId', '==', S.uid], ['facilityId', '==', f.id], ['kind', '==', 'maintenance']], limit: 60 })]);
+  const days = Array.from({ length: 7 }, (_, i) => dayKey(new Date(Date.now() + i * 864e5))), slots = await db.list('facilitySlots', { where: [['facilityId', '==', f.id]], limit: 800 });
+  const cell = (r, day) => { const start = zonedISO(day, '00:00'), end = new Date(new Date(start).getTime() + 864e5).toISOString(); const stamps = new Set(slots.filter(s => s.resourceId === r.id && s.start < end && s.end > start).map(s => s.stamp)); return Math.round(stamps.size / Math.max(1, r.close - r.open) * 100); };
+  return page(pageHead('Availability and maintenance', 'Block slots for maintenance. Members cannot book blocked time.', html`<button class="btn btn-green" data-act="blockSlot" data-f="${f.id}">${ic('wrench')} Block a slot</button>`), facSwitch(f, mine),
+    html`<section class="panel mb"><div class="panel-head"><h3>Next seven days</h3><div class="legend"><span><i style="background:var(--soft)"></i>Free</span><span><i style="background:var(--green-t)"></i>Quiet</span><span><i style="background:var(--yellow)"></i>Busy</span><span><i style="background:var(--magenta)"></i>Nearly full</span></div></div><div class="heat" style="overflow-x:auto"><span></span>${days.map(day => html`<span class="hd">${fmt(zonedISO(day, '12:00'), { weekday: 'short', day: 'numeric' })}</span>`)}${res.map(r => html`<span class="semi clip" title="${r.name}">${r.name}</span>${days.map(day => { const v = cell(r, day), h = v === 0 ? '' : v < 25 ? 'h1' : v < 50 ? 'h2' : v < 75 ? 'h3' : 'h4'; return html`<span class="hc ${h}" title="${r.name}: ${v}% booked">${v ? `${v}%` : ''}</span>`; })}`)}</div></section>
+    <section class="panel"><h3 class="mb">Blocked slots</h3>${table([{ h: 'Space', v: b => b.resourceName }, { h: 'From', v: b => fmtDT(b.start) }, { h: 'To', v: b => fmtDT(b.end) }, { h: 'Reason', v: b => b.note }, { h: 'Status', v: b => badge(b.status) }, { h: '', act: true, v: b => b.status === 'confirmed' ? html`<button class="btn btn-sm btn-ghost" data-act="cancelBooking" data-id="${b.id}">Unblock</button>` : '' }], rows, html`<p class="small muted">No blocked slots.</p>`)}</section>`);
+}, 'Availability and maintenance');
+</script>
+</body>
+</html>

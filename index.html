@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SportsHub-KE | One platform. Every sport. Every player.</title>
+<meta name="description" content="Discover games near you, find a team, book sports facilities and train with verified coaches. One membership, eight sessions a month, any sport.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="SportsHub-KE | One platform. Every sport. Every player.">
+<meta property="og:description" content="Discover games near you, find a team, book sports facilities and train with verified coaches.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="preload" as="image" href="/assets/photos/football-sunset.webp">
+<link rel="preload" as="image" href="/assets/branding/logo-light.webp">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1">
+<!-- The hero is in the HTML so it paints before any data loads. -->
+<section class="hx" id="top" aria-labelledby="hx-title">
+  <div class="wrap hx-grid">
+    <div class="hx-copy c-magenta">
+      <div class="hx-kick"><span class="lanes" aria-hidden="true"><i></i><i></i><i></i><i></i></span>Kenya · Every sport</div>
+      <!-- Rotating headlines: the first is the page heading; the rest fade in turn. -->
+      <div class="hslides" id="hx-slides" aria-live="polite">
+        <div class="hslide on"><h1 id="hx-title"><span class="ln" style="--li:0"><span>Your sport.</span></span><span class="ln" style="--li:1"><span>Your people.</span></span><span class="ln" style="--li:2"><span>Your <em>game.<svg class="uline" viewBox="0 0 200 12" preserveAspectRatio="none" aria-hidden="true"><path d="M3 8C52 3 128 2 197 6"/></svg></em></span></span></h1>
+          <p class="hx-p">Find a game tonight, a team that needs you, a court to book and a coach who knows the work. One membership covers eight sessions a month, in any sport.</p></div>
+        <div class="hslide"><p class="h1like">Find a game <em>tonight,</em> near you.</p>
+          <p class="hx-p">Open games are ranked by distance, your sports, your level and when you are free. Join in two taps, or host your own.</p></div>
+        <div class="hslide"><p class="h1like">Eight sessions. <em>Any sport.</em></p>
+          <p class="hx-p">Play football twice, swim once, try tennis. One membership works at every participating facility, and a session is only spent when you attend.</p></div>
+        <div class="hslide"><p class="h1like">Pitches and courts, <em>full again.</em></p>
+          <p class="hx-p">Facilities list their spaces and hours, accept member sessions and get matched with teams nearby that need a ground.</p></div>
+      </div>
+      <div class="hdots" id="hx-dots" role="group" aria-label="Headlines"><button class="on" aria-label="Your sport, your people, your game"></button><button aria-label="Find a game tonight"></button><button aria-label="Eight sessions, any sport"></button><button aria-label="Pitches and courts"></button></div>
+      <div class="hx-find">
+        <form class="srch" id="hero-find" aria-label="Find a game">
+          <select name="sport" aria-label="Sport" id="hero-sport"><option value="">Every sport</option></select>
+          <span class="sep"></span>
+          <select name="when" aria-label="When"><option value="">Any time</option><option value="today">Today</option><option value="weekend">This weekend</option><option value="week">Next 7 days</option></select>
+          <button class="go btn-pulse">Find games <svg class="i" aria-hidden="true"><use href="/assets/icons.svg#i-arrow-right"/></svg></button>
+        </form>
+        <div class="hx-alt" id="hx-alt"><a href="/sports/">Explore sports</a><a href="/facilities/">Book a facility</a><a href="/auth/register/"><b>Join SportsHub</b></a></div>
+      </div>
+      <div class="hx-stats" id="hx-stats" aria-label="SportsHub today"></div>
+    </div>
+    <div class="hx-art">
+      <figure class="c-blue"><img src="/assets/photos/football-sunset.webp" alt="A footballer striking the ball on a sunlit grass pitch" fetchpriority="high"><figcaption><i></i>Grassroots football</figcaption></figure>
+      <figure><img src="/assets/photos/basketball-dunk.webp" alt="A basketball player rising for a dunk under green arena lights"></figure>
+      <figure><img src="/assets/photos/swim-butterfly.webp" alt="A swimmer mid-stroke in butterfly, water spraying"></figure>
+    </div>
+  </div>
+</section>
+<!-- Three things SportsHub does, centred under the hero. Figures come from live data. -->
+<section class="pillars" id="pillars" aria-label="SportsHub at a glance"></section>
+<div id="page-slot"></div>
+</main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { img, BRAND, esc, html, raw, ic, $, $$, money, fmtDay, fmtTime, pct, initials, scoreGame, SPORT_COLORS, COUNTY_NAMES } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { S, SPORT, sportC, onMount, avatar, toUrl, route, rewriteLinks, observeReveal, countUp, reduced } from '/shared/js/ui.js';
+import { qUpcoming, spacesLeft, adSlotData, productCard, compRow } from '/shared/js/features.js';
+
+/* ==========================================================================
+   HOME. Every number, game, team, venue and product comes from live data.
+   Where there is nothing yet, the page says so plainly and offers the next step.
+   ========================================================================== */
+const TAGLINE = { football: 'Five-a-side on a Tuesday. A Sunday league. A side that needs a keeper.', basketball: 'Pick-up 3x3 runs and organised 5x5, with the numbers kept.', athletics: 'Track sessions, time trials and personal bests that coaches confirm.', 'road-running': 'Group runs from 5K to the marathon, wherever you are.', golf: 'Rounds and stableford days, with your handicap in one place.', tennis: 'Find a partner, see which courts are free, book before you travel.', swimming: 'Lane sessions and galas, measured the way swimmers measure.', volleyball: 'Indoor and beach, six-a-side or pairs.', rugby: 'Fifteens and sevens. Clubs looking for players and fixtures.', cricket: 'T20 nights and long Saturdays at the oval.' };
+const two = n => String(n).padStart(2, '0');
+const idx = (n, label) => html`<div class="idx"><b>${two(n)}</b>${label}</div>`;
+const heading = (lines, cls = '') => html`<h2 class="${cls}">${lines.map((l, i) => html`<span class="lnr" style="--d:${i * .1}s"><span>${l}</span></span>`)}</h2>`;
+const photo = (src, alt, extra = '') => raw(`<img src="${esc(src)}" alt="${esc(alt)}" loading="lazy"${extra}>`);
+const plural = (n, one) => `${n} ${one}${n === 1 ? '' : 's'}`;
+
+/* ----- Game rows: time first, then what, where and how full ----- */
+const gameLine = (g, i) => {
+  const s = SPORT(g.sportId), left = spacesLeft(g), m = S.profile ? scoreGame(g, S.profile, S.origin) : null;
+  return html`<a class="gr ${sportC(g.sportId)} seq" style="--i:${i}" href="#/games/${g.id}">
+    <span class="d"><b>${fmtTime(g.start)}</b><span>${fmtDay(g.start)}</span></span>
+    <span class="t">${g.title}<small><i></i>${s.name} · ${g.skill || 'All levels'}<span class="vm"> · ${g.venueName || g.town}</span>${g.covered ? ' · Covered by membership' : ''}${m && m.score >= 50 ? ` · ${m.score}% match` : ''}</small></span>
+    <span class="v">${g.venueName || g.town}<span>${[g.town, g.county].filter(Boolean).join(', ')}</span></span>
+    <span class="s">${left ? `${left} of ${g.capacity} places left` : 'Full, waitlist open'}<span class="bar" style="display:block"><i style="width:${pct(g.joined, g.capacity)}%"></i></span></span>
+    <span class="go btn btn-sm ${left ? 'btn-c' : 'btn-ghost'}">${left ? 'Join' : 'Waitlist'} ${ic('arrow-right')}</span></a>`;
+};
+const gamesBoard = games => {
+  const mine = (S.profile && S.profile.sports) || [];
+  const present = [...new Set(games.map(g => g.sportId))];
+  const order = [...mine.filter(x => present.includes(x)), ...present.filter(x => !mine.includes(x))].slice(0, 5);
+  onMount(root => {
+    const box = $('#gb', root); if (!box) return;
+    const rows = $('.gb', box), btns = $$('.filt', box);
+    btns.forEach(b => b.addEventListener('click', () => {
+      btns.forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+      const id = b.dataset.s, list = (id ? games.filter(g => g.sportId === id) : games).slice(0, 6);
+      rows.classList.add('swap-out');
+      setTimeout(() => {
+        rows.innerHTML = list.length ? list.map((g, i) => gameLine(g, i).s).join('') : html`<div class="gb-empty"><p class="muted">No open ${SPORT(id).name.toLowerCase()} games listed right now.</p><a class="link" href="#/app/games/new">Host one ${ic('arrow-right')}</a></div>`.s;
+        rewriteLinks(rows); rows.classList.remove('swap-out');
+      }, 200);
+      $('#gb-all', box).setAttribute('href', toUrl(id ? `/games?sport=${id}` : '/games'));
+    }));
+  });
+  return html`<div id="gb">
+    <div class="gb-top"><div class="filters" role="group" aria-label="Filter by sport"><button class="filt" data-s="" aria-pressed="true">All sports</button>${order.map(id => html`<button class="filt ${sportC(id)}" data-s="${id}" aria-pressed="false"><span class="dot"></span>${SPORT(id).name}</button>`)}</div>
+      <nav class="views" aria-label="Ways to browse games"><a class="on" href="#/games">${ic('list')} List</a><a href="#/games?view=map">${ic('map')} Map</a><a href="#/games?view=calendar">${ic('calendar-days')} Calendar</a></nav></div>
+    <div class="gb reveal">${games.length ? games.slice(0, 6).map(gameLine) : html`<div class="gb-empty"><p class="muted" style="max-width:52ch">No open games are listed yet. Registered members can host the first one and choose who can join.</p><a class="btn" href="#/app/games/new">Host a game ${ic('arrow-right')}</a></div>`}</div>
+    <div class="row between mt"><span class="small muted">${games.length ? `${plural(games.length, 'open game')} coming up` : ''}</span><a class="link" id="gb-all" href="#/games">All games ${ic('arrow-right')}</a></div></div>`;
+};
+
+/* ----- Sports: a mosaic of photo tiles, each with its own colour and live numbers ----- */
+const sportsTiles = (games, teams) => {
+  const active = S.sports.filter(s => s.active !== false);
+  const list = active.filter(s => s.photo).slice(0, 8);
+  if (!list.length) return '';
+  const nums = id => { const g = games.filter(x => x.sportId === id).length, t = teams.filter(x => x.sportId === id).length; return [g ? plural(g, 'open game') : 'No open games yet', t ? plural(t, 'team') : ''].filter(Boolean).join(' · '); };
+  const others = active.filter(s => !list.includes(s));
+  return html`<div class="tiles">${list.map((s, i) => html`<a class="tile ${i ? '' : 'big'} ${sportC(s.id)} ${i % 3 === 1 ? 'reveal-rotate' : 'reveal-scale'}" style="--d:${(i % 4) * .08}s" href="#/sports/${s.id}">${photo(s.photo, s.name)}<span class="tl"><span><b>${s.name}</b><small>${nums(s.id)}</small>${i ? '' : html`<p>${TAGLINE[s.id] || ''}</p>`}</span><span class="arw">${ic('arrow-right')}</span></span></a>`)}
+      <a class="tile more reveal-scale" style="--d:.24s" href="#/sports"><b>All ${active.length} sports</b><span>Games, teams, coaches and venues for each one.</span><span class="arw">${ic('arrow-right')}</span></a></div>
+    ${others.length ? html`<div class="tiles-foot rv f"><span>Also on SportsHub</span>${others.map(s => html`<a class="${sportC(s.id)}" href="#/sports/${s.id}">${s.name}</a>`)}</div>` : ''}`;
+};
+
+/* ----- Live strip under the hero: the next real open games ----- */
+/* Under the hero: open games, reach across Kenya, and one membership for every sport. */
+const pillars = games => {
+  const sports = S.sports.filter(x => x.active !== false).length;
+  const chip = (c, icon, n, label, href, d) => html`<a class="pillar ${c} reveal" style="--d:${d}s" href="${href}"><span class="p-ic">${ic(icon)}</span><span class="p-t"><b data-countup>${n}</b><span>${label}</span></span><span class="p-go">${ic('arrow-right')}</span></a>`;
+  $('#pillars').innerHTML = html`<div class="wrap"><div class="pillars-grid">
+    ${chip('c-blue', 'calendar-days', games.length, 'Open games to join', '#/games', 0)}
+    ${chip('c-green', 'map-pin', COUNTY_NAMES.length, 'Counties covered', '#/facilities', .1)}
+    ${chip('c-magenta', 'badge-check', S.settings.sessionsPerPeriod, `Sessions a month, ${sports} sports`, '#/membership', .2)}
+  </div></div>`.s;
+  rewriteLinks($('#pillars')); countUp($('#pillars'));
+};
+/* Real figures in the hero. Lists are capped, so a full list reads as "40+". */
+const heroStats = (games, teams, facilities) => {
+  const cap = (n, max) => `${n}${n >= max ? '+' : ''}`;
+  $('#hx-stats').innerHTML = html`<div><b data-countup>${S.sports.filter(s => s.active !== false).length}</b><span>Sports</span></div><div class="c-blue"><b data-countup>${cap(games.length, 40)}</b><span>Open games</span></div><div class="c-green"><b data-countup>${cap(teams.length, 30)}</b><span>Teams</span></div><div class="c-yellow"><b data-countup>${cap(facilities.length, 5)}</b><span>Facilities</span></div>`.s;
+  countUp($('#hx-stats'));
+};
+/* Headlines rotate every six seconds; the dots jump to one and restart the timer. */
+const heroSlides = () => {
+  const sl = $$('#hx-slides .hslide'), dots = $$('#hx-dots button');
+  let i = 0, t;
+  const go = n => { i = n; sl.forEach((e, j) => { e.classList.toggle('on', j === n); e.setAttribute('aria-hidden', String(j !== n)); }); dots.forEach((b, j) => b.classList.toggle('on', j === n)); };
+  const run = () => { clearInterval(t); if (!reduced()) t = setInterval(() => { if (!document.hidden) go((i + 1) % sl.length); }, 6000); };
+  dots.forEach((b, j) => b.addEventListener('click', () => { go(j); run(); }));
+  go(0); run();
+};
+
+const FEATURED_POST_LIMIT = 3;
+route('/', async () => {
+  const hp = (await db.get('systemSettings', 'homepage')) || {};
+  const pick = async (col, section, q, n) => {
+    const ids = hp[section] || [];
+    if (ids.length) { const rows = (await Promise.all(ids.slice(0, n).map(id => db.get(col, id)))).filter(Boolean); if (rows.length) return rows; }
+    return (await db.list(col, q)).slice(0, n);
+  };
+  const [games, teams, facilities, coaches, comps, products, posts, heroAd, midAd] = await Promise.all([
+    pick('games', 'games', qUpcoming([], 40), 40), pick('teams', 'teams', { limit: 30 }, 30),
+    pick('facilities', 'facilities', { where: [['status', '==', 'approved']], limit: 8 }, 5), pick('coaches', 'coaches', { where: [['verified', '==', true]], limit: 6 }, 4),
+    pick('tournaments', 'tournaments', { where: [['status', 'in', ['open', 'running']]], limit: 12 }, 12), pick('products', 'products', { where: [['status', '==', 'active']], orderBy: ['sold', 'desc'], limit: 8 }, 6),
+    pick('socialPosts', 'posts', { where: [['status', '==', 'published'], ['visibility', '==', 'public']], orderBy: ['at', 'desc'], limit: FEATURED_POST_LIMIT }, FEATURED_POST_LIMIT),
+    adSlotData('home_hero'), adSlotData('home_feature')
+  ]);
+  S.pageTitle = '';
+  S.pageDesc = 'Discover games near you, find a team, book sports facilities and train with verified coaches. One membership, eight sessions a month, any sport.';
+  /* Signed-in players see games ranked for them; everyone else sees the soonest. */
+  const board = S.profile ? [...games].sort((a, b) => scoreGame(b, S.profile, S.origin).score - scoreGame(a, S.profile, S.origin).score || (a.start > b.start ? 1 : -1)) : games;
+  const first = S.profile && S.profile.name ? S.profile.name.split(' ')[0] : '';
+  const teamList = [...teams].sort((a, b) => (b.recruiting ? 1 : 0) - (a.recruiting ? 1 : 0)).slice(0, 3);
+  const lead = facilities[0], more = facilities.slice(1, 5);
+
+  onMount(() => {
+    $('#hero-sport').innerHTML = `<option value="">Every sport</option>${S.sports.filter(s => s.active !== false).map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}`;
+    if (S.profile && (S.profile.sports || [])[0]) $('#hero-sport').value = S.profile.sports[0];
+    $('#hero-find').onsubmit = e => { e.preventDefault(); const f = new FormData(e.target), p = new URLSearchParams(); for (const [k, v] of f) if (v) p.set(k, v); location.assign(`/games/${p.toString() ? `?${p}` : ''}`); };
+    if (S.uid) $('#hx-alt').innerHTML = html`<a href="#/app"><b>Open your dashboard</b></a><a href="#/facilities">Book a facility</a><a href="#/teams">Find a team</a>`.s;
+    if (heroAd) $('#hx-alt').insertAdjacentHTML('afterend', html`<p class="hx-sponsor" data-ad="${heroAd.id}" data-placement="home_hero">In partnership with <b>${heroAd.business}</b></p>`.s);
+    rewriteLinks($('#hx-alt').parentElement);
+    pillars(board); heroStats(games, teams, facilities); heroSlides();
+    observeReveal(document);
+  });
+
+  return html`
+  <section class="section"><div class="wrap c-magenta">
+    ${idx(1, 'Sports')}
+    <div class="sec-head">${heading(['Pick a sport.', 'We will find the game.'], 'hd wide')}<p class="lede rv u" style="--d:.2s;max-width:40ch">${S.sports.filter(s => s.active !== false).length} sports, from five-a-side to the marathon. Open one to see the games, teams and venues near you.</p></div>
+    ${sportsTiles(games, teams)}
+  </div></section>
+
+  <section class="section soft"><div class="wrap c-blue">
+    ${idx(2, 'Games')}
+    <div class="sec-head">${heading(first ? [`Picked for you, ${first}.`] : ['Turn up and play.'], 'hd wide')}<p class="lede rv u" style="--d:.2s;max-width:40ch">${first ? 'Ranked by distance, your sports, your level and when you are free.' : 'Open games you can join today. Sign in and we rank them by distance, sport and level.'}</p></div>
+    ${gamesBoard(board)}
+  </div></section>
+
+  <section class="section"><div class="wrap c-green">
+    <div class="tm-split"><span class="pic reveal-left">${photo(img('equipment-dark'), 'Balls and kit for many sports: football, basketball, volleyball, rugby and more')}</span>
+      <div class="reveal-right">${idx(3, 'Teams')}${heading(['Better with a team', 'behind you.'], 'hd')}<p>Captains build squads, schedule fixtures and challenge rivals. Players find a side that needs their position.</p>
+        ${teamList.length ? html`<div class="tm-list">${teamList.map(t => html`<a class="tm-row ${sportC(t.sportId)}" href="#/teams/${t.id}"><span class="crest">${t.logo ? raw(`<img src="${esc(t.logo)}" alt="">`) : initials(t.name)}</span><span><b>${t.name}</b><small>${SPORT(t.sportId).name} · ${[t.town, t.county].filter(Boolean).join(', ')} · ${plural(t.memberCount || 0, 'member')}</small></span>${t.recruiting ? html`<span class="need">Recruiting</span>` : ''}</a>`)}</div>`
+          : html`<p class="small muted mt">Teams appear here once captains register them and they are approved.</p>`}
+        <div class="row mt-lg"><a class="btn btn-green" href="#/teams">Browse teams ${ic('arrow-right')}</a><a class="link" href="#/app/teams/new">Start a team</a></div></div></div>
+  </div></section>
+
+  <section class="section soft"><div class="wrap c-blue"><div class="coach-split">
+    <div>${idx(4, 'Coaches')}${heading(['Learn from people', 'who know the work.'], 'hd')}<p class="lede rv u" style="--d:.2s">Every coach on SportsHub has been reviewed by our team before their profile goes public.</p>
+      <div class="trust reveal-left" style="--d:.3s"><div>${ic('shield-check')}<span><b>Reviewed applications</b>Qualifications and experience checked by a person.</span></div><div>${ic('users')}<span><b>Real squads</b>Coaches apply with at least three players they already train.</span></div><div>${ic('badge-check')}<span><b>Confirmed records</b>Coaches verify the results on their players' profiles.</span></div></div>
+      <div class="row mt-lg rv f" style="--d:.4s"><a class="btn btn-blue" href="#/coaches">Find a coach</a><a class="btn btn-ghost" href="#/join/coach">Apply as a coach</a></div></div>
+    <div><span class="pic coach-pic reveal-right" style="margin-top:0;margin-bottom:16px">${photo(img('coach'), 'A coach directing a football training session on a stadium pitch')}</span>
+      <div class="coaches">${coaches.length ? coaches.map((co, i) => html`<a class="coach reveal-right" style="--d:${i * .08}s" href="#/coaches/${co.id}">${avatar(co.name, co.photo)}<div style="min-width:0"><h3>${co.name}</h3><div class="q">${co.academy || (co.sports || []).map(x => SPORT(x).name).join(', ')} · ${co.area || co.county}</div><div class="chips">${(co.sports || []).slice(0, 3).map(x => html`<span class="sport-pill ${sportC(x)}">${SPORT(x).name}</span>`)}${co.accepting ? html`<span class="badge ok">Taking players</span>` : ''}</div></div>${co.experienceYears ? html`<div class="yrs"><b>${co.experienceYears}</b>years</div>` : ''}</a>`)
+        : html`<div class="empty rv u" style="background:#fff">${ic('clipboard-list')}<h4>The first verified coaches are being reviewed</h4><p class="small">Approved coaches appear here with their sports, area and experience.</p></div>`}</div>
+      ${coaches.length && coaches.length < 3 ? html`<p class="small muted rv f" style="margin-top:16px">More coaches are in review. Coaching already? <a class="semi" style="color:var(--blue-d);text-decoration:underline" href="#/join/coach">Apply with your players</a>.</p>` : ''}</div>
+  </div></div></section>
+
+  <section class="section"><div class="wrap c-green">
+    ${idx(5, 'Facilities')}
+    <div class="sec-head">${heading(['Good grounds, with hours', 'waiting to be played.'], 'hd wide')}<a class="link rv f" href="#/facilities">All facilities ${ic('arrow-right')}</a></div>
+    ${lead ? html`<a class="venue" href="#/facilities/${lead.id}"><span class="pic reveal-left">${photo((lead.photos || [])[0] || img('facility'), lead.name)}</span>
+        <div class="venue-meta reveal-right" style="--d:.15s"><span class="eyebrow">${lead.participating ? 'Membership venue' : 'Pay per booking'}</span><h3>${lead.name}</h3><p class="muted">${lead.description ? lead.description.slice(0, 160) : `${lead.town}, ${lead.county}`}</p>
+          <dl><dt>Location</dt><dd>${[lead.town, lead.county].filter(Boolean).join(', ')}</dd><dt>Sports</dt><dd>${(lead.sportIds || []).slice(0, 4).map(x => SPORT(x).name).join(', ')}</dd>${lead.priceFrom ? html`<dt>From</dt><dd>${money(lead.priceFrom)} an hour</dd>` : ''}<dt>Hours</dt><dd>${lead.hours || 'See facility'}</dd></dl>
+          <span class="btn btn-green" style="align-self:flex-start">See availability ${ic('arrow-right')}</span></div></a>
+      ${more.length ? html`<div class="venues">${more.map((f, i) => html`<a class="vn reveal-rotate" style="--d:${i * .08}s" href="#/facilities/${f.id}"><span class="pic">${photo((f.photos || [])[0] || img('facility-1'), '')}</span><h4>${f.name}</h4><span>${[f.town, f.county].filter(Boolean).join(', ')}${f.priceFrom ? ` · from ${money(f.priceFrom)}/hr` : ''}</span></a>`)}</div>` : ''}`
+    : html`<div class="venue"><span class="pic reveal-left">${photo(img('facility'), 'An empty floodlit football pitch, seen from the corner flag')}</span>
+        <div class="venue-meta reveal-right" style="--d:.15s"><span class="eyebrow">For facility owners</span><h3>List your pitches and courts.</h3><p class="muted">Show your hours and prices, accept member sessions with no ground-access fee, and get matched with teams and players nearby. Facilities go live after a review by our team.</p><a class="btn btn-green" style="align-self:flex-start" href="#/join/facility">List your facility ${ic('arrow-right')}</a></div></div>`}
+  </div></section>
+
+  <section class="section soft"><div class="wrap c-magenta">
+    ${idx(6, 'Marketplace')}
+    <div class="shop"><a class="shop-lead reveal-left" href="#/marketplace"><div class="img-rv">${photo(img('marketplace'), 'SportsHub kit: jerseys, boots, balls, rackets and a cricket bat')}</div><div><h3>Kit, from people who play.</h3><span class="link">Visit the marketplace ${ic('arrow-right')}</span></div></a>
+      ${products.length ? html`<div class="prods">${products.map((p, i) => html`<div class="reveal-scale" style="--d:${i * .06}s">${productCard(p)}</div>`)}</div>`
+      : html`<div class="stack" style="justify-content:center">${heading(['Boots, kits and', 'equipment, verified.'], 'hd')}<p class="lede rv u" style="--d:.2s">The marketplace is opening to verified sellers. Every store is reviewed and every product is moderated before it appears here.</p><div class="row rv f" style="--d:.3s"><a class="btn" href="#/marketplace">See the marketplace ${ic('arrow-right')}</a></div></div>`}</div>
+  </div></section>
+
+  <section class="section tint-blue"><div class="wrap c-blue"><div class="comps">
+    <div>${idx(7, 'Competitions')}${heading(['Something', 'to play for.'], 'hd')}<p class="lede rv u" style="--d:.2s">Leagues, knockouts and meets with live fixtures, results and standings.</p>
+</div>
+    <div>${comps.length ? html`<div class="comp-list">${comps.slice(0, 6).map((t, i) => html`<div class="reveal" style="--d:${i * .07}s">${compRow(t)}</div>`)}</div><div class="row mt-lg rv f"><a class="btn btn-blue" href="#/tournaments">All competitions ${ic('arrow-right')}</a></div>`
+      : html`<div class="empty reveal-scale" style="background:#fff">${ic('trophy')}<h4>No competitions open right now</h4><p class="small">Competitions appear here with dates, venues and entries as soon as organisers open registration.</p></div>`}</div>
+  </div></div></section>
+
+  <section class="section"><div class="wrap c-green"><div class="member">
+    <div>${idx(8, 'Membership')}${heading(['Eight sessions.', 'Any sport.'], 'hd')}<p class="lede rv u" style="--d:.2s">Play football twice, swim once, try tennis. Sessions work across every eligible sport at participating facilities, with no ground-access fee on covered sessions. A session is only spent when you attend.</p>
+      <div class="prices reveal-rotate" style="--d:.3s"><div><b>${money(S.settings.registrationFee)}</b><span>One-time registration</span></div><div><b>${money(S.settings.membershipFee)}</b><span>A month, ${S.settings.sessionsPerPeriod} sessions</span></div></div>
+      <div class="row mt-lg rv f" style="--d:.4s">${S.uid ? html`<a class="btn btn-green" href="#/app/membership">Your membership ${ic('arrow-right')}</a>` : html`<a class="btn btn-green" href="#/join/player">Become a member ${ic('arrow-right')}</a>`}<a class="link" href="#/membership">How it works</a></div></div>
+    <div><div class="eight" aria-label="An example month of eight sessions">${[['football', 'Football'], ['football', 'Football'], ['swimming', 'Swimming'], ['tennis', 'Tennis'], ['basketball', 'Basketball'], ['athletics', 'Athletics'], ['football', 'Football'], ['golf', 'Golf']].map(([id, l], i) => html`<div class="c-${SPORT_COLORS[id]}" style="--i:${i}"><b>${two(i + 1)}</b>${l}</div>`)}</div><p class="small faint mt">An example month. Your eight sessions, your mix.</p></div>
+  </div></div></section>
+
+  ${posts.length ? html`<section class="section soft"><div class="wrap c-magenta">${idx(9, 'Community')}<div class="sec-head">${heading(['From the field.'], 'hd')}<a class="link rv f" href="#/community">Open the community ${ic('arrow-right')}</a></div>
+    <div class="posts">${posts.map((p, i) => html`<a class="pst rv u" style="--d:${i * .08}s" href="#/community">${p.photo ? html`<span class="pic">${photo(p.photo, '')}</span>` : ''}<span class="by">${avatar(p.author.name, '', 'sm')}${p.author.name}</span><p>${p.text}</p><div class="post-acts"><span>${ic('heart')} ${p.likes || 0}</span><span>${ic('message-circle')} ${p.comments || 0}</span></div></a>`)}</div></div></section>` : ''}
+
+  <section class="section tight"><div class="wrap c-blue">
+    ${midAd ? html`<div class="sponsor-line reveal-scale" data-ad="${midAd.id}" data-placement="home_feature">${midAd.creative ? html`<span class="pic" style="width:120px;aspect-ratio:4/3">${photo(midAd.creative, '')}</span>` : html`<span class="ad-label">Sponsored</span>`}<div><span class="ad-label">Sponsored · ${midAd.business}</span><h3>${midAd.title}</h3><p>${midAd.description}</p></div><button class="btn btn-ghost" data-act="adClick" data-id="${midAd.id}" data-placement="home_feature" data-url="${midAd.destination}">Learn more ${ic('arrow-up-right')}</button></div>`
+      : html`<div class="sponsor-line reveal-scale"><span class="ad-label">Sponsorship</span><div><h3>Put your brand beside the game.</h3><p>Reach people who play, by county and by sport. Every campaign is reviewed, and adverts never interrupt a booking.</p></div><a class="btn btn-ghost" href="#/advertise">Advertise with us ${ic('arrow-right')}</a></div>`}
+  </div></section>
+
+  <section class="final c-magenta" aria-labelledby="t-final"><div class="wrap final-in">
+    <a class="island reveal-scale" href="#/join" aria-label="Join SportsHub-KE">${raw(`<img src="${BRAND.light}" alt="SportsHub-KE. Every sport. Every player. One home." width="640" height="213">`)}</a>
+    <div><span class="eyebrow rv f">Every sport. Every player. One home.</span><h2 id="t-final" style="margin-top:14px">${['Your next game is', 'closer than you think.'].map((l, i) => html`<span class="lnr" style="--d:${i * .1}s"><span>${l}</span></span>`)}</h2>
+      <p class="rv u" style="--d:.2s">${S.uid ? 'Your games, sessions, team and coach are all in one place.' : 'Create your account in a few minutes. Players, coaches and sports facilities are all welcome.'}</p>
+      <div class="row rv f" style="--d:.3s">${S.uid ? html`<a class="btn btn-pulse" href="#/app">Open your dashboard ${ic('arrow-right')}</a><a class="btn btn-ghost" href="#/games">Find a game</a>` : html`<a class="btn btn-pulse" href="#/join">Join SportsHub ${ic('arrow-right')}</a><a class="btn btn-ghost" href="#/games">Browse games first</a>`}</div></div>
+  </div></section>`;
+}, { title: '' });
+</script>
+</body>
+</html>

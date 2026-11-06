@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Contact requests | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Contact requests | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, A, badge, emptyState, table, run } from '/shared/js/ui.js';
+import { appRoute, pageHead } from '/shared/js/features.js';
+
+A.respondContact = d => run('respondContactRequest', { id: d.id, accept: !!d.v }, d.v ? 'Accepted. You can now message each other.' : 'Declined.').catch(() => {});
+appRoute('/app/requests', async () => {
+  const rows = await db.list('contactRequests', { where: [['participants', 'array-contains', S.uid]], limit: 30 });
+  const mine = rows.filter(r => r.toUid === S.uid);
+  return page(pageHead('Contact requests', 'Scouts, coaches and organisations who asked to connect. Accepting opens a chat. Your phone number is never shared.'),
+    table([{ h: 'From', v: r => html`<span class="semi">${r.fromName}</span>` }, { h: 'Message', v: r => r.message }, { h: 'Status', v: r => badge(r.status) }, { h: '', act: true, v: r => r.status === 'pending' ? html`<button class="btn btn-sm btn-green" data-act="respondContact" data-id="${r.id}" data-v="1">Accept</button><button class="btn btn-sm btn-ghost" data-act="respondContact" data-id="${r.id}" data-v="">Decline</button>` : '' }], mine, emptyState('inbox', 'No requests', 'When a verified scout or coach reaches out, it will appear here.')));
+}, 'Contact requests');
+</script>
+</body>
+</html>

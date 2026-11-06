@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Squad | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Squad | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, titleCase } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, A, badge, table, fld, confirmBox, promptForm, run } from '/shared/js/ui.js';
+import { appRoute, pageHead, captainTeam, noTeam, teamTabs } from '/shared/js/features.js';
+
+A.inviteMember = async d => {
+  const v = await promptForm({ title: 'Add a player', intro: 'Enter a SportsHub ID to invite an existing member. Otherwise add a name to record them and invite them to register.', fields: html`${fld({ name: 'memberId', label: 'SportsHub ID', full: true, placeholder: 'SH-KE-001234' })}${fld({ name: 'name', label: 'Or player name' })}${fld({ name: 'contact', label: 'Their email' })}`, submit: 'Add player', tone: 'btn-green' });
+  if (v) await run('teamInvite', { teamId: d.t, ...v }, 'Player added.').catch(() => {});
+};
+A.setTeamRole = async d => {
+  const v = await promptForm({ title: 'Team role', intro: 'Making someone captain transfers team control to them.', fields: fld({ name: 'role', label: 'Role', type: 'select', value: d.r, options: [['member', 'Member'], ['vice', 'Vice-captain'], ['admin', 'Team administrator'], ['captain', 'Captain']], full: true }), submit: 'Save role' });
+  if (v) await run('teamSetRole', { teamId: d.t, uid: d.uid, role: v.role }, 'Role updated.').catch(() => {});
+};
+A.removeMember = async d => { if (await confirmBox('Remove this player?', 'They will be notified.', 'Remove', 'btn-bad')) await run('teamRemoveMember', { teamId: d.t, uid: d.uid }, 'Player removed.').catch(() => {}); };
+appRoute('/app/team/squad', async () => {
+  const { team: t, mine } = await captainTeam(); if (!t) return noTeam();
+  const rows = (await db.list('teamMembers', { where: [['teamId', '==', t.id]], limit: 100 })).filter(m => m.status !== 'removed').sort((a, b) => a.status > b.status ? 1 : -1);
+  const isCap = t.captainId === S.uid;
+  return page(pageHead('Squad', `${t.name}. Invite existing members, or record players who have not joined yet.`, html`<button class="btn btn-green" data-act="inviteMember" data-t="${t.id}">${ic('user-plus')} Add a player</button>`), teamTabs(t, mine),
+    table([{ h: 'Player', v: m => m.status === 'external' ? html`<span class="semi">${m.name}</span>` : html`<a class="semi" href="#/players/${m.uid}">${m.name}</a>` }, { h: 'Role', v: m => titleCase(m.role) }, { h: 'Status', v: m => badge(m.status) }, { h: '', act: true, v: m => html`${m.status === 'requested' ? html`<button class="btn btn-sm btn-green" data-act="teamReview" data-t="${t.id}" data-uid="${m.uid}" data-v="1">Approve</button><button class="btn btn-sm btn-ghost" data-act="teamReview" data-t="${t.id}" data-uid="${m.uid}" data-v="">Decline</button>` : ''}${m.status === 'active' && isCap && m.uid !== S.uid ? html`<button class="btn btn-sm btn-ghost" data-act="setTeamRole" data-t="${t.id}" data-uid="${m.uid}" data-r="${m.role}">Role</button>` : ''}${m.uid !== t.captainId ? html`<button class="btn btn-sm btn-ghost" data-act="removeMember" data-t="${t.id}" data-uid="${m.uid}" aria-label="Remove ${m.name}">${ic('x')}</button>` : ''}` }], rows));
+}, 'Squad');
+</script>
+</body>
+</html>

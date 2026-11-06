@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Checkout | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Checkout | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { COUNTY_NAMES, html, money } from '/shared/js/core.js';
+import { db, callOp } from '/shared/js/firebase.js';
+import { S, F, toast, fld, go, route, refreshSession, pgHero } from '/shared/js/ui.js';
+import { saveCart, paymentFlow } from '/shared/js/features.js';
+
+F.placeOrder = async v => {
+  const r = await callOp('placeOrder', { items: S.cart, delivery: v });
+  S.cart = []; await saveCart();
+  const outcome = await paymentFlow({ txId: r.txId, amount: r.amount, description: 'Marketplace order' });
+  await refreshSession();
+  go('/app/orders');
+  if (outcome === 'success') toast('Order paid. The seller has been notified.', 'green');
+};
+route('/checkout', async () => {
+  if (!S.cart.length) { go('/cart', true); return undefined; }
+  const items = await Promise.all(S.cart.map(async i => ({ ...i, p: await db.get('products', i.productId) })));
+  const total = items.reduce((a, i) => a + (i.p ? (i.p.salePrice || i.p.price) * i.qty : 0), 0);
+  const priv = await db.get('usersPrivate', S.uid);
+  return html`${pgHero({ c: 'magenta', c2: 'green', eye: 'Marketplace', title: 'Checkout' })}<div class="wrap section tight c-magenta"><div class="grid g-side"><form class="form" id="checkout" data-form="placeOrder"><div class="form-grid">
+      ${fld({ name: 'name', label: 'Recipient name', value: S.user.name, required: true })}${fld({ name: 'phone', label: 'Phone for delivery', type: 'tel', value: (priv && priv.phone) || '', required: true })}${fld({ name: 'county', label: 'County', type: 'select', value: S.user.county, options: COUNTY_NAMES, required: true })}${fld({ name: 'address', label: 'Delivery or pick-up location', required: true, placeholder: 'Town and a landmark' })}</div>
+      <p class="form-err err hide"></p></form>
+    <aside class="panel stack"><div class="lines small">${items.filter(i => i.p).map(i => html`<div class="row between nowrap"><span>${i.qty} × ${i.p.title}</span><span class="nums">${money((i.p.salePrice || i.p.price) * i.qty)}</span></div>`)}</div><div class="row between"><span class="semi">Total</span><span class="price" style="font-size:1.2rem">${money(total)}</span></div>
+      <button class="btn btn-magenta btn-block" form="checkout" type="submit">Place order and pay</button>${''}</aside></div></div>`;
+}, { title: 'Checkout', auth: true });
+</script>
+</body>
+</html>

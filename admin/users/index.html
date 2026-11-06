@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>User management | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="User management | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { ROLE_LABEL, html, ic, titleCase } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { A, badge, table, fld, confirmBox, promptForm, run, route } from '/shared/js/ui.js';
+import { pageHead, adminPage, adminView, filt, adminSearch } from '/shared/js/features.js';
+
+/* ----- People ----- */
+adminView.users = async () => {
+  const rows = filt(await db.list('users', { limit: 300 }), 'q', u => `${u.name} ${u.memberId} ${u.county}`);
+  const dels = await db.list('deletionRequests', { where: [['status', '==', 'pending']], limit: 30 });
+  return html`${pageHead('User management', `${rows.length} accounts`, html`<button class="btn btn-ghost" data-act="exportCol" data-col="users">${ic('download')} Export</button>`)}${adminSearch('q', 'Search by name, ID or county')}
+   ${dels.length ? html`<div class="panel mb"><h3 class="mb">Deletion requests</h3><div class="lines">${dels.map(d => html`<div class="row between"><span class="small"><b>${d.uid}</b> ${d.reason}</span><button class="btn btn-sm btn-bad" data-act="processDeletion" data-uid="${d.uid}">Delete personal data</button></div>`)}</div></div>` : ''}
+   ${table([{ h: 'Member', v: u => html`<span class="semi">${u.name}</span><br><span class="xs faint">${u.memberId}</span>` }, { h: 'Location', v: u => u.county }, { h: 'Roles', v: u => (u.roles || []).map(r => ROLE_LABEL[r] || titleCase(r)).join(', ') }, { h: 'Registration', v: u => badge(u.registrationStatus === 'paid' ? 'paid' : 'pending') }, { h: 'Status', v: u => badge(u.status) }, { h: '', act: true, v: u => html`<button class="btn btn-sm ${u.status === 'suspended' ? 'btn-green' : 'btn-ghost'}" data-act="toggleSuspend" data-uid="${u.id}" data-to="${u.status === 'suspended' ? 'active' : 'suspended'}">${u.status === 'suspended' ? 'Restore' : 'Suspend'}</button>` }], rows)}`;
+};
+A.toggleSuspend = async d => {
+  const v = await promptForm({ title: d.to === 'suspended' ? 'Suspend account' : 'Restore account', fields: fld({ name: 'reason', label: 'Reason', required: true, full: true, type: 'textarea' }), submit: 'Confirm', tone: d.to === 'suspended' ? 'btn-magenta' : '' });
+  if (v) await run('setUserStatus', { uid: d.uid, status: d.to, reason: v.reason }, 'Account updated.').catch(() => {});
+};
+A.processDeletion = async d => { if (await confirmBox('Delete personal data?', 'Removes personal data for this account. Financial ledgers stay as legal records with no personal details.', 'Delete', 'btn-bad')) await run('processDeletion', { uid: d.uid }, 'Personal data removed.').catch(() => {}); };
+route('/admin/users', adminPage('users'), { shell: 'app', auth: true, admin: true, title: "User management" });
+</script>
+</body>
+</html>

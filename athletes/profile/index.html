@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SportsHub-KE | One platform. Every sport. Every player.</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="SportsHub-KE | One platform. Every sport. Every player.">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, raw, esc, ic, titleCase, fmt, fmtDate, initials } from '/shared/js/core.js';
+import { db, callOp } from '/shared/js/firebase.js';
+import { S, SPORT, sportC, hasRole, canAdmin, A, emptyState, table, run, go, route } from '/shared/js/ui.js';
+import { teamLine, coachLine } from '/shared/js/features.js';
+
+A.toggleFollow = d => run('toggleFollow', { uid: d.uid }).catch(() => {});
+A.messageUser = async d => { const r = await callOp('startConversation', { type: 'direct', members: [d.uid] }); go(`/app/messages/${r.id}`); };
+const locked = (t, b) => html`<div class="wrap section" style="padding-top:150px">${emptyState('lock', t, b)}</div>`;
+route('/players/:id', async ({ id }) => {
+  const p = await db.get('playerProfiles', id);
+  if (!p) return locked('This profile is private', 'This member has limited who can see their profile.');
+  S.pageTitle = p.name;
+  const isMe = S.uid === id, restricted = (p.visibility === 'private' && !isMe && !S.adminRole) || (p.visibility === 'members' && !S.uid);
+  const protectedMinor = p.isMinor && !isMe && !S.adminRole && !hasRole('coach') && !hasRole('scout');
+  if (restricted || protectedMinor) return locked(p.isMinor ? 'This profile is protected' : 'This profile is private', p.isMinor ? 'Profiles of players under 18 are protected and shown only to verified coaches and scouts with guardian consent.' : 'This member has limited who can see their profile.');
+  const [stats, teams, following] = await Promise.all([db.list('playerStatistics', { where: [['uid', '==', id]], orderBy: ['date', 'desc'], limit: 30 }), Promise.all((p.teamIds || []).map(t => db.get('teams', t))), S.uid && !isMe ? db.get('follows', `${S.uid}_${id}`) : null]);
+  const coach = p.coachId ? await db.get('coaches', p.coachId) : null, canVerify = S.uid && !isMe && (hasRole('organiser') || canAdmin('players') || (p.coachId === S.uid));
+  const canContact = S.uid && !isMe && (hasRole('scout') || hasRole('coach') || hasRole('organiser'));
+  const main = (p.sports || [])[0], c = SPORT(main).color || 'blue', verified = stats.filter(s => s.source === 'verified').length, myTeams = teams.filter(Boolean);
+  const label = (s, k) => (SPORT(s.sportId).statFields.find(f => f.key === k) || {}).label || titleCase(k);
+  return html`<header class="pg-hero c-${c}" style="padding-bottom:clamp(40px,5vw,64px)"><div class="wrap"><div class="row top" style="gap:clamp(20px,3vw,36px);width:100%;align-items:flex-end">
+      <span class="img-rv" style="width:clamp(96px,12vw,148px);aspect-ratio:1;border-radius:14px;overflow:hidden;flex:none;background:#fff;color:var(--cd);display:flex;align-items:center;justify-content:center;font-size:1.8rem;font-weight:700;box-shadow:0 0 0 4px #fff">${p.photo ? raw(`<img src="${esc(p.photo)}" alt="" style="width:100%;height:100%;object-fit:cover">`) : initials(p.name)}</span>
+      <div class="grow stack sm"><span class="eyebrow rv f">Athlete · ${p.memberId}</span><h1 style="font-size:clamp(1.9rem,3.4vw,2.8rem)"><span class="lnr"><span>${p.name}</span></span></h1>
+        <div class="row small rv f" style="--d:.2s;color:var(--ink-2);gap:6px 18px"><span>${ic('map-pin')} ${p.isMinor ? p.county : [p.town, p.county].filter(Boolean).join(', ')}</span><span>${p.skill}</span>${(p.sports || []).length ? html`<span>${(p.sports || []).map(s => SPORT(s).name).join(' · ')}</span>` : ''}${p.isMinor ? html`<span class="tag" style="background:#fff">Under 18 · ${p.guardianVerified ? 'Guardian verified' : 'Consent pending'}</span>` : ''}</div></div>
+      <div class="row rv f" style="--d:.3s">${isMe ? html`<a class="btn" href="#/app/profile">Edit profile</a>` : ''}${S.uid && !isMe && !p.isMinor ? html`<button class="btn btn-c" data-act="toggleFollow" data-uid="${id}">${following ? 'Following' : 'Follow'}</button><button class="btn btn-ghost" data-act="messageUser" data-uid="${id}">${ic('message-square')} Message</button>` : ''}${canContact ? html`<button class="btn" data-act="contactPlayer" data-uid="${id}">Send contact request</button>` : ''}</div>
+    </div></div><span class="ph-line"></span></header>
+  <div class="wrap section" style="padding-top:clamp(40px,5vw,64px)">
+    <div class="figs rv u" style="margin-bottom:clamp(40px,5vw,64px)"><div><b>${(p.sports || []).length}</b><span>Sports</span></div><div><b>${stats.length}</b><span>Recorded results</span></div><div><b>${verified}</b><span>Verified by coaches or organisers</span></div><div><b>${myTeams.length}</b><span>Teams</span></div><div><b>${(p.achievements || []).length}</b><span>Achievements</span></div></div>
+    <div class="dgrid"><div class="dcol">
+      ${p.bio ? html`<section><div class="blk-h"><span class="k">About</span></div><p class="lede" style="color:var(--ink)">${p.bio}</p></section>` : ''}
+      <section><div class="blk-h"><h2>Sports and positions</h2></div><div class="board">${(p.sports || []).length ? (p.sports || []).map(s => { const sp = SPORT(s); return html`<div class="fx ${sportC(s)}" style="grid-template-columns:44px minmax(0,1fr) auto"><span class="avatar sq" style="background:var(--ct);color:var(--cd)">${ic(sp.icon)}</span><div><div class="ttl">${sp.name}</div><div class="meta"><span>${(p.positions && p.positions[s]) || 'No position listed'}</span></div></div><span class="small muted">${p.skill}</span></div>`; }) : html`<p class="small muted" style="padding:16px 0">No sports listed yet.</p>`}</div></section>
+      <section><div class="blk-h"><h2>Results and statistics</h2>${verified ? html`<span class="verified">${ic('badge-check')} ${verified} verified</span>` : ''}</div>
+        ${stats.length ? html`<div class="panel">${table([{ h: 'Date', v: s => fmtDate(s.date) }, { h: 'Sport', v: s => SPORT(s.sportId).name }, { h: 'Record', v: s => Object.entries(s.fields).map(([k, v]) => `${label(s, k)}: ${v}`).join(' · ') }, { h: 'Source', v: s => s.source === 'verified' ? html`<span class="verified">${ic('badge-check')} Verified${s.verifiedByName ? `, ${s.verifiedByName}` : ''}</span>` : html`<span class="badge">Self-reported</span>` }, ...(canVerify ? [{ h: '', act: true, v: s => s.source === 'self' ? html`<button class="btn btn-sm btn-ghost" data-act="verifyStat" data-id="${s.id}">Verify</button>` : '' }] : [])], stats)}</div>` : html`<div class="empty">${ic('chart-column')}<h4>No results recorded yet</h4><p class="small">Results appear here as they are recorded and confirmed.</p></div>`}</section>
+    </div><aside class="dcol" style="gap:28px">
+      <div><div class="blk-h"><span class="k">Teams</span></div><div class="side-list">${myTeams.length ? myTeams.map(t => html`<div>${teamLine(t)}</div>`) : html`<p class="small muted">Not in a team yet.</p>`}</div></div>
+      ${coach ? html`<div><div class="blk-h"><span class="k">Coach</span></div>${coachLine(coach)}</div>` : ''}
+      ${(p.achievements || []).length ? html`<div><div class="blk-h"><span class="k">Achievements</span></div><div class="side-list small">${p.achievements.map(a => html`<div class="row nowrap sm">${ic('trophy')} <span>${a}</span></div>`)}</div></div>` : ''}
+      ${(p.personalBests || []).length ? html`<div><div class="blk-h"><span class="k">Personal bests</span></div><div class="side-list small">${p.personalBests.map(a => html`<div>${a}</div>`)}</div></div>` : ''}
+      ${(p.certificates || []).length ? html`<div><div class="blk-h"><span class="k">Certificates</span></div><div class="side-list small">${p.certificates.map(a => html`<div>${a}</div>`)}</div></div>` : ''}
+      ${(p.media || []).length ? html`<div><div class="blk-h"><span class="k">Highlights</span></div><div class="side-list small">${p.media.map((a, i) => html`<a class="line-row" href="${a}" target="_blank" rel="noopener noreferrer">${ic('play')}<span class="t semi">Highlight ${i + 1}</span>${ic('arrow-up-right')}</a>`)}</div></div>` : ''}
+      <div><div class="blk-h"><span class="k">Usually available</span></div><div class="chips">${(p.availability || []).length ? p.availability.map(a => html`<span class="chip">${a}</span>`) : html`<span class="small muted">Not shared</span>`}</div></div>
+    </aside></div></div>`;
+});
+</script>
+</body>
+</html>

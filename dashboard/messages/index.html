@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Messages | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Messages | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { esc, html, ic, $, fmtTime, timeAgo, readImage } from '/shared/js/core.js';
+import { genId, db, backend, callOp } from '/shared/js/firebase.js';
+import { S, A, F, onMount, onLeave, toast, showErr, avatar, emptyState, fld, promptForm, go, renderMain, route } from '/shared/js/ui.js';
+import { nowISO } from '/shared/js/features.js';
+
+/* ----- Messaging: real-time listeners, cleaned up when you leave ----- */
+const safeMedia = u => /^(https:\/\/|data:(image\/|application\/pdf))/.test(String(u || ''));
+const convTitle = c => c.title || Object.entries(c.memberNames || {}).filter(([k]) => k !== S.uid).map(([, v]) => v).join(', ') || 'Conversation';
+const messagesView = async ({ id } = {}) => {
+  onMount(() => {
+    const list = $('#conv-list'), s = { convs: [], q: '' };
+    const drawList = () => {
+      if (!list) return;
+      const shown = s.convs.filter(c => convTitle(c).toLowerCase().includes(s.q) || (c.last && (c.last.text || '').toLowerCase().includes(s.q))).sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+      list.innerHTML = shown.length ? shown.map(c => {
+        const n = (c.unread && c.unread[S.uid]) || 0, pre = '#';
+        return html`<a class="conv ${c.id === id ? 'on' : ''}" href="${pre}/app/messages/${c.id}">${avatar(convTitle(c), '', c.type === 'direct' ? '' : 'sq')}<span class="grow" style="min-width:0"><span class="${n ? 'strong' : 'semi'} clip" style="display:block">${convTitle(c)}</span><span class="small muted clip" style="display:block">${c.last ? (c.last.text || 'Attachment') : 'No messages yet'}</span></span><span class="tar"><span class="xs faint" style="display:block">${c.last ? timeAgo(c.last.at) : ''}</span>${n ? html`<span class="n">${n}</span>` : ''}</span></a>`.s;
+      }).join('') : html`<p class="small muted" style="padding:16px">No conversations.</p>`.s;
+    };
+    const q = $('#conv-q'); if (q) q.addEventListener('input', () => { s.q = q.value.toLowerCase(); drawList(); });
+    const unsub = db.watch('conversations', { where: [['members', 'array-contains', S.uid]], limit: 100 }, rows => { s.convs = rows; drawList(); });
+    onLeave(unsub);
+    if (id) openThread(id);
+  });
+  return html`<div class="chat ${id ? 'open' : ''}"><div class="chat-list"><div class="top stack sm"><div class="row between"><h2 style="font-size:1.1rem">Messages</h2><button class="btn btn-sm btn-ghost" data-act="newGroup">${ic('plus')} Group</button></div><div class="search-box" style="max-width:none">${ic('search')}<input id="conv-q" type="search" placeholder="Search conversations" aria-label="Search conversations"></div></div><div id="conv-list"></div></div>
+    <div class="chat-main" id="thread">${id ? html`<div class="row" style="padding:24px"><span class="spin"></span></div>` : html`<div style="margin:auto;padding:24px">${emptyState('message-square', 'Choose a conversation', 'Messages arrive here live. Open a second tab with another demo account to see it.')}</div>`}</div></div>`;
+};
+const THREAD = { limit: 30 };
+const openThread = cid => {
+  const box = $('#thread');
+  let conv = null, msgs = [], typingTimer = null, typingSent = 0;
+  THREAD.limit = 30;
+  const draw = () => {
+    if (!conv) { box.innerHTML = html`<div style="margin:auto;padding:24px">${emptyState('lock', 'Conversation not available', 'You do not have access to this conversation.')}</div>`.s; return; }
+    const others = (conv.members || []).filter(m => m !== S.uid), other = others[0];
+    if (!$('#msg-body', box)) {
+      box.innerHTML = html`<div class="chat-head"><a class="icon-btn only-m" href="${'#'}/app/messages" aria-label="Back to conversations">${ic('arrow-left')}</a>${avatar(convTitle(conv), '', conv.type === 'direct' ? 'sm' : 'sm sq')}<div class="grow" style="min-width:0"><div class="semi clip">${convTitle(conv)}</div><div class="xs faint" id="presence">${conv.type === 'direct' ? '' : `${conv.members.length} members`}</div></div>
+        <div style="position:relative"><button class="icon-btn" data-act="threadMenu" data-c="${cid}" data-t="${conv.type}" data-o="${other || ''}" aria-label="Conversation options">${ic('ellipsis-vertical')}</button></div></div>
+        <div class="chat-body" id="msg-body" aria-live="polite"></div><div class="typing" id="typing"></div>
+        ${conv.blocked ? html`<div class="notice" style="margin:10px">Messaging is blocked in this conversation.</div>` : html`<form class="chat-foot" id="msg-form" data-form="sendMessage"><label class="icon-btn" title="Attach image or PDF" style="cursor:pointer">${ic('paperclip')}<input class="sr" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" id="msg-file" aria-label="Attach file"></label><textarea id="msg-text" name="text" rows="1" placeholder="Write a message" aria-label="Message" maxlength="2000"></textarea><input type="hidden" name="cid" value="${cid}"><button class="btn" type="submit" aria-label="Send">${ic('send')}</button></form>`}`.s;
+      const ta = $('#msg-text', box), file = $('#msg-file', box);
+      if (ta) {
+        ta.addEventListener('input', () => {
+          if (Date.now() - typingSent > 3000) { typingSent = Date.now(); db.update('conversations', cid, { typing: { ...(conv.typing || {}), [S.uid]: nowISO() } }).catch(() => {}); }
+        });
+        ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#msg-form').requestSubmit(); } });
+      }
+      if (file) file.addEventListener('change', async () => {
+        try {
+          const f = file.files[0]; if (!f) return;
+          let url, type;
+          if (f.type === 'application/pdf') { if (f.size > (10) * 1024 * 1024) throw new Error(`PDFs must be ${'10 MB'} or smaller.`); url = await backend.upload(f, `chat/${cid}/${genId('f')}.pdf`); type = 'file'; }
+          else { url = await backend.upload(await readImage(f, 1200), `chat/${cid}/${genId('i')}.jpg`); type = 'image'; }
+          await sendMsg(cid, conv, { text: type === 'file' ? f.name : '', type, url });
+        } catch (e) { showErr(e); }
+        file.value = '';
+      });
+    }
+    const body = $('#msg-body', box), atEnd = body.scrollHeight - body.scrollTop - body.clientHeight < 80;
+    const readers = Object.entries(conv.readAt || {}).filter(([u]) => u !== S.uid);
+    const ordered = [...msgs].reverse();
+    body.innerHTML = html`${msgs.length >= THREAD.limit ? html`<button class="btn btn-ghost btn-sm" style="align-self:center" data-act="olderMsgs">Load earlier messages</button>` : ''}${ordered.map((m, i) => { const me = m.by === S.uid, showWho = !me && conv.type !== 'direct' && (i === 0 || ordered[i - 1].by !== m.by), read = me && readers.some(([, at]) => at >= m.at);
+      return html`<div class="msg ${me ? 'me' : ''}" data-mid="${m.id}">${showWho ? html`<div class="who">${m.byName}</div>` : ''}${m.removed ? html`<em class="small">Removed by a moderator</em>` : html`${m.type === 'image' && safeMedia(m.url) ? html`<img src="${m.url}" alt="Shared image" loading="lazy">` : ''}${m.type === 'file' && safeMedia(m.url) ? html`<a href="${m.url}" target="_blank" rel="noopener noreferrer" style="text-decoration:underline">${ic('file-text')} ${m.text}</a>` : m.text}${m.demoReply ? html`<div class="xs" style="opacity:.6">Demo auto-reply</div>` : ''}`}
+        <div class="m">${!me && !m.removed ? html`<button class="xs" style="opacity:.7" data-act="reportMsg" data-id="${m.id}" data-text="${(m.text || '').slice(0, 200)}">Report</button>` : ''}<span>${fmtTime(m.at)}</span>${me ? ic(read ? 'check-check' : 'check') : ''}</div></div>`; })}`.s;
+    if (atEnd) body.scrollTop = body.scrollHeight;
+    const typers = Object.entries(conv.typing || {}).filter(([u, at]) => u !== S.uid && Date.now() - new Date(at).getTime() < 5000).map(([u]) => (conv.memberNames || {})[u] || 'Someone');
+    $('#typing', box).textContent = typers.length ? `${typers.join(', ')} ${typers.length > 1 ? 'are' : 'is'} typing...` : '';
+    clearTimeout(typingTimer); if (typers.length) typingTimer = setTimeout(draw, 5200);
+  };
+  const markRead = () => {
+    if (!conv || !(conv.members || []).includes(S.uid)) return;
+    if ((conv.unread && conv.unread[S.uid]) || !(conv.readAt && conv.readAt[S.uid]) || (conv.last && conv.readAt[S.uid] < conv.last.at))
+      db.update('conversations', cid, { unread: { ...(conv.unread || {}), [S.uid]: 0 }, readAt: { ...(conv.readAt || {}), [S.uid]: nowISO() } }).catch(() => {});
+  };
+  let msgUnsub = () => {};
+  const watchMsgs = () => { msgUnsub(); msgUnsub = db.watch('messages', { where: [['cid', '==', cid], ['members', 'array-contains', S.uid]], orderBy: ['at', 'desc'], limit: THREAD.limit }, rows => { msgs = rows; draw(); }); };
+  const convUnsub = db.watchDoc('conversations', cid, c => { conv = c; draw(); markRead(); });
+  watchMsgs();
+  A.olderMsgs = () => { THREAD.limit += 30; watchMsgs(); };
+  let presUnsub = () => {};
+  const startPresence = () => {
+    if (!conv || conv.type !== 'direct') return;
+    const other = conv.members.find(m => m !== S.uid);
+    presUnsub = db.watchDoc('presence', other, p => { const el = $('#presence', box); if (!el) return; const live = p && Date.now() - new Date(p.at).getTime() < 120000; el.innerHTML = live ? `<i class="dot-on"></i> Online` : p ? `Last seen ${esc(timeAgo(p.at))}` : ''; });
+  };
+  setTimeout(startPresence, 200);
+  onLeave(() => { convUnsub(); msgUnsub(); presUnsub(); clearTimeout(typingTimer); });
+  S.ui.threadConv = () => conv;
+};
+const sendMsg = async (cid, conv, { text, type = 'text', url = '' }) => {
+  const at = nowISO(), members = conv.members;
+  await db.add('messages', { cid, members, by: S.uid, byName: (conv.memberNames || {})[S.uid] || S.user.name, text, type, url, at });
+  const unread = { ...(conv.unread || {}) }; members.forEach(m => { if (m !== S.uid) unread[m] = (unread[m] || 0) + 1; });
+  await db.update('conversations', cid, { last: { text: text || (type === 'image' ? 'Image' : 'File'), at, by: S.uid }, updatedAt: at, unread, typing: { ...(conv.typing || {}), [S.uid]: '' } });
+  
+};
+F.sendMessage = async (v, form) => {
+  const text = v.text.trim(); if (!text) return;
+  const conv = S.ui.threadConv(); if (!conv) return;
+  $('#msg-text', form).value = '';
+  await sendMsg(v.cid, conv, { text });
+};
+A.threadMenu = (d, el) => {
+  const host = el.parentElement, old = $('.menu', host); if (old) { old.remove(); return; }
+  const m = document.createElement('div'); m.className = 'menu'; m.dataset.open = '1';
+  m.innerHTML = html`${d.t === 'group' ? html`<button data-act="manageMembers" data-c="${d.c}">${ic('users')} Manage members</button>` : ''}${d.t !== 'group' && d.t !== 'team' && d.t !== 'game' && d.o ? html`<button data-act="blockUser" data-uid="${d.o}">${ic('ban')} Block or unblock</button>` : ''}<button data-act="reportThing" data-type="conversation" data-id="${d.c}" data-text="Conversation">${ic('flag')} Report conversation</button>`.s;
+  host.append(m);
+};
+A.reportMsg = d => A.reportThing({ type: 'message', id: d.id, text: d.text });
+A.blockUser = async d => { const r = await callOp('toggleBlock', { uid: d.uid }); toast(r.blocked ? 'Member blocked.' : 'Member unblocked.'); renderMain(); };
+A.newGroup = async () => {
+  const v = await promptForm({ title: 'New group', fields: html`${fld({ name: 'title', label: 'Group name', required: true, full: true })}${fld({ name: 'memberIds', label: 'SportsHub IDs, comma separated', full: true, placeholder: 'SH-KE-001001, SH-KE-001002' })}`, submit: 'Create group' });
+  if (!v) return;
+  const r = await callOp('startConversation', { type: 'group', title: v.title });
+  for (const mid of String(v.memberIds || '').split(',').map(x => x.trim()).filter(Boolean)) await callOp('manageGroup', { id: r.id, addMemberId: mid }).catch(showErr);
+  go(`/app/messages/${r.id}`);
+};
+A.manageMembers = async d => {
+  const c = await db.get('conversations', d.c);
+  const v = await promptForm({ title: 'Group members', intro: Object.values(c.memberNames || {}).join(', '), fields: html`${fld({ name: 'add', label: 'Add by SportsHub ID', full: true })}${fld({ name: 'remove', label: 'Remove', type: 'select', blank: 'Nobody', options: c.members.filter(m => m !== S.uid).map(m => [m, c.memberNames[m] || m]), full: true })}`, submit: 'Update group' });
+  if (!v) return;
+  if (v.add) await callOp('manageGroup', { id: d.c, addMemberId: v.add }).catch(showErr);
+  if (v.remove) await callOp('manageGroup', { id: d.c, removeUid: v.remove }).catch(showErr);
+  renderMain();
+};
+route('/app/messages', p => messagesView(p), { shell: 'app', auth: true, title: 'Messages' });
+</script>
+</body>
+</html>

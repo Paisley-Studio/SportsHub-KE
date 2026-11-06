@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Facility home | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Facility home | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { img, html, raw, esc, ic, money, pct, titleCase, fmt, fmtDT, fmtDay, fmtTime, dayKey, initials } from '/shared/js/core.js';
+import { db, callOp } from '/shared/js/firebase.js';
+import { page, S, A, F, SPORT, sportC, badge, verifiedMark, run, go, dashHero, onMount } from '/shared/js/ui.js';
+import { nowISO, appRoute, facilityGate, facSwitch, facStatus } from '/shared/js/features.js';
+
+F.facOffer = v => run('updateFacility', v, 'Offer published.');
+A.removeOffer = d => run('updateFacility', { id: d.f, removeOffer: d.id }, 'Offer removed.').catch(() => {});
+/* Match-up desk: open a conversation with a nearby team's captain to offer a slot. */
+A.offerSlot = async d => {
+  const r = await callOp('startConversation', { type: 'direct', members: [d.uid], title: `${d.fac} · Venue for ${d.team}` });
+  go(`/app/messages/${r.id}`);
+};
+const hourOf = iso => Number(fmt(iso, { hour: 'numeric', hourCycle: 'h23' })) + Number(fmt(iso, { minute: 'numeric' })) / 60;
+
+/* Today, every space, every opening hour. Bookings are drawn where they sit in the day. */
+const dayBoard = (res, todays) => {
+  if (!res.length) return html`<p class="small muted">Add your pitches and courts to see the day board.</p>`;
+  const open = Math.min(...res.map(r => r.open ?? 6)), close = Math.max(...res.map(r => r.close ?? 22)), span = Math.max(1, close - open), nowH = hourOf(new Date().toISOString());
+  const pos = (s, e) => { const a = Math.max(open, hourOf(s)), b = Math.min(close, hourOf(e) || close); return `left:${(a - open) / span * 100}%;width:${Math.max(2, (b - a) / span * 100)}%`; };
+  const hrs = Array.from({ length: span }, (_, i) => open + i);
+  return html`<div class="dayb"><div class="dayb-g" style="--h:${span}"><span></span><div class="hrs">${hrs.map(h => html`<span>${String(h).padStart(2, '0')}</span>`)}</div>
+    ${res.map((r, ri) => { const bk = todays.filter(b => b.resourceId === r.id); return html`<div class="rn">${r.name}<small>${bk.length} booking${bk.length === 1 ? '' : 's'}</small></div><div class="track">${hrs.map(() => raw('<span class="hl"></span>'))}${bk.map((b, i) => html`<span class="bk ${b.status === 'pending' ? 'pending' : ''} ${b.kind === 'maintenance' ? 'maint' : ''}" style="${pos(b.start, b.end)};animation-delay:${(ri * 3 + i) * 70}ms" title="${fmtTime(b.start)} to ${fmtTime(b.end)} · ${b.userName || ''} · ${titleCase(b.kind)}">${fmtTime(b.start)} ${b.kind === 'maintenance' ? 'Maintenance' : b.userName || titleCase(b.kind)}</span>`)}${nowH > open && nowH < close ? raw(`<span class="now" style="left:${(nowH - open) / span * 100}%" aria-label="Now"></span>`) : ''}</div>`; })}</div></div>
+    <div class="legend mt"><span><i style="background:var(--green)"></i>Confirmed</span><span><i class="lg-held"></i>Awaiting approval</span><span><i style="background:var(--line)"></i>Maintenance</span><span><i style="background:var(--magenta)"></i>Now</span></div>`;
+};
+appRoute('/app/facility', async () => {
+  const { f, mine, gate } = await facilityGate(); if (gate) return gate;
+  const [res, bookings, att, sets, teams, fixtures] = await Promise.all([
+    db.list('facilityResources', { where: [['facilityId', '==', f.id], ['active', '==', true]], limit: 30 }), db.list('facilityBookings', { where: [['ownerId', '==', S.uid], ['facilityId', '==', f.id]], orderBy: ['start', 'desc'], limit: 200 }),
+    db.list('sessionAttendance', { where: [['facilityId', '==', f.id]], limit: 400 }), db.list('facilitySettlements', { where: [['ownerId', '==', S.uid], ['facilityId', '==', f.id]], limit: 12 }),
+    db.list('teams', { where: [['county', '==', f.county]], limit: 60 }), db.list('fixtures', { where: [['status', '==', 'scheduled']], limit: 120 })
+  ]);
+  const now = nowISO(), today = dayKey(new Date()), live = b => !['cancelled', 'rejected'].includes(b.status);
+  const todays = bookings.filter(b => dayKey(b.start) === today && live(b)), pending = bookings.filter(b => b.status === 'pending');
+  const up = bookings.filter(b => b.start > now && ['confirmed', 'pending'].includes(b.status) && b.kind !== 'maintenance').sort((a, b) => a.start > b.start ? 1 : -1);
+  const external = bookings.filter(b => ['checked_in', 'confirmed'].includes(b.status) && ['external', 'private'].includes(b.kind)).reduce((a, b) => a + (b.price || 0), 0);
+  const owed = sets.filter(s => s.status !== 'paid').reduce((a, s) => a + s.amount, 0);
+  /* Utilisation for each of the next seven days: booked hours against open hours. */
+  const openPerDay = res.reduce((a, r) => a + ((r.close ?? 22) - (r.open ?? 6)), 0);
+  const days = Array.from({ length: 7 }, (_, i) => new Date(Date.now() + i * 864e5));
+  const util = days.map(d => { const k = dayKey(d), hrs = bookings.filter(b => dayKey(b.start) === k && live(b) && b.kind !== 'maintenance').reduce((a, b) => a + (new Date(b.end) - new Date(b.start)) / 36e5, 0); return { d, v: pct(hrs, openPerDay) }; });
+  const weekAvg = Math.round(util.reduce((a, u) => a + u.v, 0) / 7);
+  /* Teams in this county that play a sport this venue supports, and their fixtures still without a ground. */
+  const nearTeams = teams.filter(t => (f.sportIds || []).includes(t.sportId) && t.captainId && t.captainId !== S.uid).sort((a, b) => (b.memberCount || 0) - (a.memberCount || 0));
+  const nearIds = new Set(nearTeams.map(t => t.id));
+  const homeless = fixtures.filter(x => x.start > now && !x.venue && (nearIds.has(x.homeId) || nearIds.has(x.awayId))).sort((a, b) => a.start > b.start ? 1 : -1).slice(0, 4);
+  /* On narrow screens the day board scrolls; start it at the current hour. */
+  onMount(root => { const b = root.querySelector('.dayb'), n = b && b.querySelector('.now'); if (b && n && b.scrollWidth > b.clientWidth) b.scrollLeft = Math.max(0, n.getBoundingClientRect().left - b.getBoundingClientRect().left - 160); });
+  const offerBtn = t => html`<button class="btn btn-sm btn-ghost" data-act="offerSlot" data-uid="${t.captainId}" data-team="${t.name}" data-fac="${f.name}">Offer a slot</button>`;
+
+  return page(dashHero({ c: 'green', kick: 'Facility', photo: (f.photos || [])[0] || img('football-pitch'), title: f.name, sub: html`${f.verified ? verifiedMark() : ''}<span>${ic('map-pin')} ${f.town}, ${f.county}</span>${f.participating ? html`<span>Membership venue</span>` : ''}${f.hours ? html`<span>${ic('clock')} ${f.hours}</span>` : ''}`, action: html`<a class="btn btn-green" href="#/app/facility/bookings">Bookings and check-ins</a><a class="btn btn-ghost" href="#/facilities/${f.id}">Public page</a>` }), facSwitch(f, mine), facStatus(f),
+    html`<div class="figs" style="margin-bottom:36px"><div><b data-countup>${todays.length}</b><span>Bookings today</span></div><a class="${pending.length ? 'warn' : ''}" href="#/app/facility/bookings"><b data-countup>${pending.length}</b><span>Awaiting your approval</span></a><div><b>${weekAvg}%</b><span>Booked, next 7 days</span></div><div><b data-countup>${att.length}</b><span>Member sessions attended</span></div><div><b>${money(external)}</b><span>External bookings</span></div><a href="#/app/facility/settlements"><b>${money(owed)}</b><span>Settlement due to you</span></a></div>
+    <div class="dgrid"><div class="dcol">
+      <section class="c-green"><div class="blk-h"><h2>Today, ${fmt(new Date(), { weekday: 'long', day: 'numeric', month: 'long' })}</h2><a href="#/app/facility/maintenance">Availability</a></div>${dayBoard(res, todays)}</section>
+      <section class="panel c-green"><div class="panel-head"><h3>Next seven days</h3><span class="small muted">Share of open hours booked</span></div><div class="util">${util.map((u, i) => html`<div><em>${u.v}%</em><i class="${u.v ? '' : 'low'}" style="height:${Math.max(3, u.v)}%;animation-delay:${i * 70}ms"></i>${fmt(u.d, { weekday: 'short' })}</div>`)}</div></section>
+      <section class="panel"><div class="panel-head"><h3>Coming up</h3><a href="#/app/facility/bookings">All bookings</a></div>${up.length ? html`<div class="agenda">${up.slice(0, 6).map((b, i) => html`<div class="ag ${i === 0 ? 'soon' : ''} c-green"><span class="dt"><b>${fmt(b.start, { day: 'numeric' })}</b><span>${fmt(b.start, { month: 'short' })}</span></span><span class="what"><b>${b.resourceName} · ${b.userName || titleCase(b.kind)}</b><span>${fmtDay(b.start)}, ${fmtTime(b.start)} to ${fmtTime(b.end)} · ${titleCase(b.kind)}</span></span>${badge(b.status)}</div>`)}</div>` : html`<p class="small muted">No upcoming bookings yet. The match-up desk below shows teams nearby you can invite.</p>`}</section>
+      <section><div class="blk-h"><h2>Match-up desk</h2><span class="k">${f.county}</span></div>
+        <p class="small muted mb" style="max-width:62ch">Teams in ${f.county} that play ${(f.sportIds || []).slice(0, 3).map(x => SPORT(x).name.toLowerCase()).join(', ')}. Offer a slot and the conversation opens with their captain.</p>
+        ${homeless.length ? html`<div class="mdesk mb"><div class="md" style="background:var(--soft-2)"><span></span><b class="small">Fixtures still without a venue</b><span></span></div>${homeless.map(x => { const t = nearTeams.find(n => n.id === x.homeId) || nearTeams.find(n => n.id === x.awayId); return html`<div class="md ${sportC(x.sportId)}"><span class="crest">${fmt(x.start, { day: 'numeric' })}</span><div style="min-width:0"><b class="clip">${x.homeName} v ${x.awayName}</b><span>${fmtDT(x.start)} · ${SPORT(x.sportId).name}${x.roundLabel ? ` · ${x.roundLabel}` : ''}</span></div>${t ? offerBtn(t) : ''}</div>`; })}</div>` : ''}
+        ${nearTeams.length ? html`<div class="mdesk">${nearTeams.slice(0, 6).map(t => html`<div class="md ${sportC(t.sportId)}"><span class="crest">${t.logo ? raw(`<img src="${esc(t.logo)}" alt="">`) : initials(t.name)}</span><div style="min-width:0"><b class="clip">${t.name}</b><span>${SPORT(t.sportId).name} · ${t.town || t.county} · ${t.memberCount || 0} members${t.format ? ` · ${t.format}` : ''}</span></div>${offerBtn(t)}</div>`)}</div>`
+          : html`<div class="empty">${ic('users')}<h4>No teams registered in ${f.county} yet</h4><p class="small">Teams that play your sports appear here as captains register them.</p></div>`}</section>
+    </div><aside class="dcol" style="gap:28px">
+      <div class="panel"><div class="panel-head"><h3>Spaces</h3><a href="#/app/facility/pitches">Manage</a></div><div class="side-list small">${res.length ? res.map(r => html`<div class="row between nowrap"><span class="semi clip">${r.name}</span><span class="muted nums">${money(r.hourlyRate)}/hr · ${String(r.open ?? 6).padStart(2, '0')} to ${String(r.close ?? 22).padStart(2, '0')}</span></div>`) : html`<p class="muted">No spaces yet.</p>`}</div></div>
+      <div class="panel"><h3 class="mb" style="font-size:1rem">Publish an offer</h3><form class="stack sm" data-form="facOffer"><input type="hidden" name="id" value="${f.id}"><input class="input" name="offer" placeholder="Off-peak: 20% off weekdays before 3pm" required aria-label="Offer"><button class="btn btn-green btn-sm" type="submit" style="align-self:flex-start">Publish offer</button></form>${(f.offers || []).length ? html`<div class="side-list small mt">${f.offers.map(o => html`<div class="row between nowrap"><span>${o.title}</span><button class="xs faint" data-act="removeOffer" data-f="${f.id}" data-id="${o.id}">Remove</button></div>`)}</div>` : ''}</div>
+      <div class="panel"><div class="panel-head"><h3>Settlements</h3><a href="#/app/facility/settlements">All</a></div>${sets.length ? html`<div class="side-list small">${sets.slice(0, 4).map(s => html`<div class="row between nowrap"><span>${s.period || s.month || fmt(s.createdAt || new Date(), { month: 'long', year: 'numeric' })}</span><span class="row sm"><b class="nums">${money(s.amount)}</b>${badge(s.status)}</span></div>`)}</div>` : html`<p class="small muted">${f.participating ? `You receive ${money(S.settings.settlementRatePerSession)} for every attended member session, settled monthly.` : 'Join the membership programme to receive monthly settlements for member sessions.'}</p>`}</div>
+    </aside></div>`);
+}, 'Facility home');
+</script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bookings | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Bookings | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, money, titleCase, fmtDT } from '/shared/js/core.js';
+import { db, callOp } from '/shared/js/firebase.js';
+import { page, S, A, badge, emptyState, table, go } from '/shared/js/ui.js';
+import { nowISO, appRoute, pageHead } from '/shared/js/features.js';
+
+A.messageVenue = async d => { const r = await callOp('startConversation', { type: 'booking', members: [d.v], title: d.title }); go(`/app/messages/${r.id}`); };
+/* ----- Bookings ----- */
+appRoute('/app/bookings', async () => {
+  const rows = await db.list('facilityBookings', { where: [['uid', '==', S.uid]], orderBy: ['start', 'desc'], limit: 50 });
+  return page(pageHead('Bookings', 'Facility bookings made with your membership or paid directly.', html`<a class="btn btn-green" href="#/facilities">${ic('plus')} Book a facility</a>`),
+    table([{ h: 'Space', v: b => html`<a class="semi" href="#/facilities/${b.facilityId}">${b.resourceName}</a><br><span class="small muted">${b.facilityName}</span>` }, { h: 'When', v: b => fmtDT(b.start) }, { h: 'Type', v: b => titleCase(b.kind) }, { h: 'Cost', v: b => b.kind === 'covered' ? 'Covered, no fee' : b.kind === 'game' ? 'Game' : `${money(b.price)} at venue` }, { h: 'Status', v: b => badge(b.status) }, { h: '', act: true, v: b => ['pending', 'confirmed'].includes(b.status) && b.kind !== 'game' && b.start > nowISO() ? html`<button class="btn btn-sm btn-ghost" data-act="cancelBooking" data-id="${b.id}">Cancel</button><button class="btn btn-sm btn-ghost" data-act="messageVenue" data-v="${b.ownerId}" data-title="${b.resourceName} booking">Message</button>` : '' }], rows, emptyState('ticket', 'No bookings yet', 'Book a pitch or court at a participating facility.', html`<a class="btn" href="#/facilities">Browse facilities</a>`)));
+}, 'Bookings');
+</script>
+</body>
+</html>

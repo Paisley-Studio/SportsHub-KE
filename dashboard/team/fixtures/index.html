@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fixtures | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Fixtures | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, titleCase, fmtDT } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, badge, emptyState, table } from '/shared/js/ui.js';
+import { appRoute, pageHead, captainTeam, noTeam, teamTabs } from '/shared/js/features.js';
+
+appRoute('/app/team/fixtures', async () => {
+  const { team: t, mine } = await captainTeam(); if (!t) return noTeam();
+  const rows = await db.list('fixtures', { where: [['teamIds', 'array-contains', t.id]], orderBy: ['start', 'desc'], limit: 60 });
+  return page(pageHead('Fixtures', t.name, html`<a class="btn btn-green" href="#/app/team/challenges">${ic('swords')} New challenge</a>`), teamTabs(t, mine),
+    table([{ h: 'Match', v: f => html`<span class="semi">${f.homeName} ${f.status === 'completed' ? `${f.homeScore} : ${f.awayScore}` : 'v'} ${f.awayName}</span>` }, { h: 'When', v: f => fmtDT(f.start) }, { h: 'Where', v: f => f.venue || '' }, { h: 'Type', v: f => titleCase(f.kind) }, { h: 'Status', v: f => badge(f.status) }, { h: '', act: true, v: f => f.status === 'scheduled' && !f.tournamentId ? html`<button class="btn btn-sm btn-ghost" data-act="recordScore" data-id="${f.id}" data-h="${f.homeName}" data-a="${f.awayName}">Enter result</button>` : '' }], rows, emptyState('calendar-days', 'No fixtures', 'Accepted challenges and tournament matches appear here.')));
+}, 'Fixtures');
+</script>
+</body>
+</html>

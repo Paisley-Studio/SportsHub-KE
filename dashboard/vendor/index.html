@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sales overview | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Sales overview | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { img, html, ic, money, compact } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, badge, verifiedMark, metrics, barChart, hbars, dashHero } from '/shared/js/ui.js';
+import { appRoute, vendorGate, lastMonths, monthLabel } from '/shared/js/features.js';
+
+appRoute('/app/store', async () => {
+  const { st, gate } = await vendorGate(); if (gate) return gate;
+  const [orders, products] = await Promise.all([db.list('orders', { where: [['vendorId', '==', S.uid]], orderBy: ['createdAt', 'desc'], limit: 200 }), db.list('products', { where: [['vendorId', '==', S.uid]], limit: 200 })]);
+  const paid = orders.filter(o => !['pending_payment', 'cancelled', 'refunded'].includes(o.status)), rev = paid.reduce((a, o) => a + o.subtotal, 0), comm = paid.reduce((a, o) => a + o.commission, 0), open = orders.filter(o => ['paid', 'processing'].includes(o.status));
+  const low = products.filter(p => p.status === 'active' && p.stock < 5);
+  const ms = lastMonths(6).map(k => ({ l: monthLabel(k), v: paid.filter(o => o.createdAt.slice(0, 7) === k).reduce((a, o) => a + o.subtotal, 0) }));
+  const top = products.filter(p => p.sold).sort((a, b) => b.sold - a.sold).slice(0, 5).map(p => [p.title, p.sold]);
+  return page(dashHero({ c: 'magenta', c2: 'yellow', photo: st.cover || img('shop-store'), title: st.name, sub: html`${verifiedMark()}<span>${st.town}, ${st.county}</span>`, action: html`<button class="btn btn-magenta" data-act="editProduct">${ic('plus')} Add a product</button><a class="btn btn-ghost on-dark" href="#/marketplace/store/${st.id}">View storefront</a>` }),
+    '',
+    metrics([[money(rev), 'Gross sales'], [money(rev - comm), 'After commission'], [paid.length, 'Paid orders'], [open.length, 'To fulfil'], [products.filter(p => p.status === 'active').length, 'Live products']]),
+    html`<div class="grid g2 mt-lg"><section class="panel"><h3 class="mb">Sales, last six months</h3>${barChart(ms, { c: 'var(--magenta)', fmtV: compact })}</section><section class="panel"><h3 class="mb">Best sellers</h3>${top.length ? hbars(top, 'var(--magenta)') : html`<p class="small muted">No sales yet.</p>`}</section></div>
+    <div class="grid g2 mt-lg"><section class="panel"><div class="panel-head"><h3>Orders to fulfil</h3><a class="small semi" href="#/app/store/orders">All orders</a></div>${open.length ? html`<div class="lines">${open.slice(0, 5).map(o => html`<div class="row between"><span class="small"><b>${o.number}</b> · ${o.buyerName}</span>${badge(o.status)}</div>`)}</div>` : html`<p class="small muted">You are all caught up.</p>`}</section>
+    <section class="panel"><div class="panel-head"><h3>Low stock</h3><a class="small semi" href="#/app/store/products">Inventory</a></div>${low.length ? html`<div class="lines">${low.map(p => html`<div class="row between small"><span>${p.title}</span><span class="semi">${p.stock} left</span></div>`)}</div>` : html`<p class="small muted">Stock levels look healthy.</p>`}</section></div>`);
+}, 'Sales overview');
+</script>
+</body>
+</html>

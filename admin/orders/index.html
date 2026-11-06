@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Orders and disputes | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Orders and disputes | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, money, fmtDate } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { badge, table, route } from '/shared/js/ui.js';
+import { pageHead, adminPage, adminView } from '/shared/js/features.js';
+
+adminView.orders = async () => {
+  const rows = await db.list('orders', { orderBy: ['createdAt', 'desc'], limit: 150 }), disputes = rows.filter(o => o.status === 'disputed');
+  return html`${pageHead('Orders and disputes', '', html`<button class="btn btn-ghost" data-act="exportCol" data-col="orders">${ic('download')} Export</button>`)}
+   ${disputes.length ? html`<section class="panel mb"><h3 class="mb">Open disputes</h3><div class="lines">${disputes.map(o => html`<div class="row between"><span><b>${o.number}</b> ${o.buyerName} and ${o.storeName}</span><span class="row sm"><button class="btn btn-sm btn-green" data-act="orderTo" data-id="${o.id}" data-v="completed">Close in seller's favour</button><button class="btn btn-sm btn-bad" data-act="orderTo" data-id="${o.id}" data-v="cancelled">Cancel and restock</button></span></div>`)}</div></section>` : ''}
+   ${table([{ h: 'Order', v: o => o.number }, { h: 'Customer', v: o => o.buyerName }, { h: 'Store', v: o => o.storeName }, { h: 'Total', right: true, v: o => money(o.total) }, { h: 'Commission', right: true, v: o => money(o.commission) }, { h: 'Status', v: o => badge(o.status) }, { h: 'Date', v: o => fmtDate(o.createdAt) }], rows)}`;
+};
+route('/admin/orders', adminPage('orders'), { shell: 'app', auth: true, admin: true, title: "Orders and disputes" });
+</script>
+</body>
+</html>

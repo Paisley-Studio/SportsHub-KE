@@ -1,0 +1,179 @@
+rules_version = '2';
+
+// SportsHub-KE Firestore security rules.
+//
+// The model is simple on purpose. Almost nothing can be written from a browser.
+// Payments, credits, approvals, roles, bookings, orders and audit logs change only inside the
+// `trustedOp` Cloud Function, which uses the Admin SDK and bypasses these rules. A client that
+// skips the interface and talks to Firestore directly gets permission-denied.
+//
+// The only client writes allowed are: own cart, own presence, marking own notifications read,
+// and sending messages in conversations the user belongs to.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function isMe(uid) { return signedIn() && me() == uid; }
+    function adminRole() { return get(/databases/$(database)/documents/adminRoles/$(me())).data.role; }
+    function isAdmin() { return signedIn() && exists(/databases/$(database)/documents/adminRoles/$(me())); }
+    function adminIn(roles) { return isAdmin() && adminRole() in roles; }
+    function financeRead() { return adminIn(['super', 'finance', 'platform']); }
+    function hasRole(role) { return signedIn() && role in get(/databases/$(database)/documents/users/$(me())).data.roles; }
+
+    // ----- Public reference data -----
+    match /sports/{id} { allow read: if true; allow write: if false; }
+    match /advertisingPlacements/{id} { allow read: if true; allow write: if false; }
+    match /systemSettings/{id} { allow read: if id in ['platform', 'homepage']; allow write: if false; }
+    match /teams/{id} { allow read: if true; allow write: if false; }
+    match /coaches/{id} { allow read: if true; allow write: if false; }
+    match /stores/{id} { allow read: if true; allow write: if false; }
+    match /organisations/{id} { allow read: if true; allow write: if false; }
+    match /games/{id} { allow read: if true; allow write: if false; }
+    match /tournaments/{id} { allow read: if true; allow write: if false; }
+    match /tournamentRegistrations/{id} { allow read: if true; allow write: if false; }
+    match /fixtures/{id} { allow read: if true; allow write: if false; }
+    match /matchResults/{id} { allow read: if true; allow write: if false; }
+    match /reviews/{id} { allow read: if true; allow write: if false; }
+    match /facilityResources/{id} { allow read: if true; allow write: if false; }
+    match /facilitySlots/{id} { allow read: if true; allow write: if false; } // Holds no personal data, only that an hour is taken.
+
+    match /facilities/{id} {
+      allow read: if resource.data.status == 'approved' || isMe(resource.data.ownerId) || isAdmin();
+      allow write: if false;
+    }
+    match /products/{id} {
+      allow read: if resource.data.status == 'active' || isMe(resource.data.vendorId) || isAdmin();
+      allow write: if false;
+    }
+    match /advertisingCampaigns/{id} {
+      allow read: if resource.data.status == 'active' || isMe(resource.data.ownerId) || isAdmin();
+      allow write: if false;
+    }
+
+    // ----- People. Personal details live apart from public profiles. -----
+    match /users/{uid} { allow read: if isMe(uid) || isAdmin(); allow write: if false; }
+    match /usersPrivate/{uid} {
+      allow read: if isMe(uid) || adminIn(['super', 'platform', 'verification', 'support']);
+      allow write: if false;
+    }
+    match /playerProfiles/{uid} {
+      allow read: if resource.data.visibility == 'public'
+        || isMe(uid)
+        || isAdmin()
+        || (signedIn() && resource.data.visibility == 'members')
+        // Minors: only verified coaches and scouts, and only after guardian consent has been verified.
+        || (resource.data.visibility == 'protected' && resource.data.guardianVerified == true && (hasRole('scout') || hasRole('coach')))
+        || (resource.data.visibility == 'protected' && resource.data.coachId == me());
+      allow write: if false;
+    }
+    match /playerStatistics/{id} {
+      allow read: if signedIn() || get(/databases/$(database)/documents/playerProfiles/$(resource.data.uid)).data.visibility == 'public';
+      allow write: if false;
+    }
+    match /adminRoles/{uid} { allow read: if isMe(uid) || isAdmin(); allow write: if false; }
+    match /coachApplications/{uid} { allow read: if isMe(uid) || isAdmin(); allow write: if false; }
+    match /verificationRequests/{id} { allow read: if isMe(resource.data.uid) || isAdmin(); allow write: if false; }
+    match /deletionRequests/{uid} { allow read: if isMe(uid) || isAdmin(); allow write: if false; }
+    match /coachRoster/{id} { allow read: if isMe(resource.data.coachId) || isAdmin(); allow write: if false; }
+    match /coachRequests/{id} { allow read: if isMe(resource.data.coachId) || isMe(resource.data.uid) || isAdmin(); allow write: if false; }
+    match /contactRequests/{id} { allow read: if signedIn() && me() in resource.data.participants || isAdmin(); allow write: if false; }
+    match /follows/{id} { allow read: if signedIn(); allow write: if false; }
+    match /blocks/{id} { allow read: if isMe(resource.data.from); allow write: if false; }
+
+    // ----- Teams -----
+    match /teamMembers/{id} { allow read: if signedIn(); allow write: if false; }
+    match /teamExternalInvites/{id} { allow read: if isMe(resource.data.captainId) || isAdmin(); allow write: if false; }
+    match /teamTransfers/{id} {
+      allow read: if signedIn() && (me() in resource.data.officials || me() == resource.data.uid) || isAdmin();
+      allow write: if false;
+    }
+    match /challenges/{id} { allow read: if signedIn() && me() in resource.data.officials || isAdmin(); allow write: if false; }
+    match /trainingSessions/{id} { allow read: if signedIn(); allow write: if false; }
+
+    // ----- Games and bookings -----
+    match /gameParticipants/{id} { allow read: if signedIn(); allow write: if false; }
+    match /gameInvites/{id} { allow read, write: if false; }
+    match /facilityBookings/{id} {
+      allow read: if isMe(resource.data.uid) || isMe(resource.data.ownerId) || isAdmin();
+      allow write: if false;
+    }
+    match /sessionBookings/{id} { allow read: if isMe(resource.data.uid) || isAdmin(); allow write: if false; }
+    match /sessionAttendance/{id} {
+      allow read: if isMe(resource.data.uid) || isAdmin()
+        || (signedIn() && get(/databases/$(database)/documents/facilities/$(resource.data.facilityId)).data.ownerId == me());
+      allow write: if false;
+    }
+
+    // ----- Money. Read your own. Finance can read all. Nobody writes from a browser. -----
+    match /memberships/{uid} { allow read: if isMe(uid) || isAdmin(); allow write: if false; }
+    match /membershipPeriods/{id} { allow read: if isMe(resource.data.uid) || isAdmin(); allow write: if false; }
+    match /membershipLedger/{id} { allow read: if isMe(resource.data.uid) || isAdmin(); allow write: if false; }
+    match /membershipTransfers/{id} { allow read: if signedIn() && me() in resource.data.participants || isAdmin(); allow write: if false; }
+    match /paymentTransactions/{id} { allow read: if isMe(resource.data.uid) || financeRead(); allow write: if false; }
+    match /paymentEvents/{id} { allow read, write: if false; }
+    match /facilitySettlements/{id} { allow read: if isMe(resource.data.ownerId) || financeRead(); allow write: if false; }
+    match /payouts/{id} { allow read: if isMe(resource.data.vendorId) || financeRead(); allow write: if false; }
+    match /vendors/{uid} { allow read: if isMe(uid) || isAdmin(); allow write: if false; }
+    match /orders/{id} {
+      allow read: if isMe(resource.data.buyerId) || isMe(resource.data.vendorId) || adminIn(['super', 'platform', 'finance', 'marketplace', 'support']);
+      allow write: if false;
+    }
+
+    // ----- Own cart -----
+    match /carts/{uid} {
+      allow read: if isMe(uid);
+      allow write: if isMe(uid) && (request.resource == null || (request.resource.data.items is list && request.resource.data.items.size() <= 50));
+    }
+
+    // ----- Messaging: members only, and sender identity cannot be forged. -----
+    match /conversations/{cid} {
+      allow read: if signedIn() && me() in resource.data.members;
+      allow create, delete: if false;
+      allow update: if signedIn() && me() in resource.data.members
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['last', 'updatedAt', 'unread', 'readAt', 'typing']);
+    }
+    match /messages/{mid} {
+      allow read: if signedIn() && me() in resource.data.members;
+      allow create: if signedIn()
+        && request.resource.data.by == me()
+        && request.resource.data.byName == get(/databases/$(database)/documents/conversations/$(request.resource.data.cid)).data.memberNames[me()]
+        && request.resource.data.get('url', '').matches('^$|^https://.*')
+        && request.resource.data.text is string && request.resource.data.text.size() <= 2000
+        && get(/databases/$(database)/documents/conversations/$(request.resource.data.cid)).data.blocked != true
+        && me() in get(/databases/$(database)/documents/conversations/$(request.resource.data.cid)).data.members
+        && request.resource.data.members == get(/databases/$(database)/documents/conversations/$(request.resource.data.cid)).data.members;
+      allow update, delete: if false;
+    }
+    match /presence/{uid} {
+      allow read: if signedIn();
+      allow write: if isMe(uid) && request.resource.data.keys().hasOnly(['at']);
+    }
+
+    // ----- Notifications: read your own, and the only change allowed is marking them read. -----
+    match /notifications/{id} {
+      allow read: if isMe(resource.data.uid);
+      allow update: if isMe(resource.data.uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create, delete: if false;
+    }
+
+    // ----- Community -----
+    match /socialPosts/{id} {
+      allow read: if (resource.data.status == 'published' && resource.data.visibility == 'public')
+        || (signedIn() && resource.data.status == 'published' && resource.data.visibility in ['public', 'members'])
+        || isMe(resource.data.authorUid) || isAdmin();
+      allow write: if false;
+    }
+    match /comments/{id} { allow read: if resource.data.status == 'published' || isAdmin(); allow write: if false; }
+    match /postLikes/{id} { allow read: if signedIn(); allow write: if false; }
+    match /reports/{id} { allow read: if isMe(resource.data.reporterId) || isAdmin(); allow write: if false; }
+    match /announcements/{id} { allow read: if signedIn(); allow write: if false; }
+
+    // ----- Audit log: written only by trusted operations, and immutable. -----
+    match /auditLogs/{id} { allow read: if adminIn(['super', 'platform', 'finance']); allow write: if false; }
+
+    // Anything not listed above is closed.
+    match /{document=**} { allow read, write: if false; }
+  }
+}

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Advertising | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Advertising | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { AD_PLACEMENTS, html, ic, money, compact, fmtDate, zonedISO } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, SPORT, A, badge, emptyState, metrics, table, fld, sportOptions, openModal, promptForm, run } from '/shared/js/ui.js';
+import { appRoute, pageHead } from '/shared/js/features.js';
+
+A.newCampaign = async () => {
+  const v = await promptForm({ title: 'New advertising campaign', wide: true, intro: 'Campaigns are reviewed before they run. Advertising never appears inside a booking flow.', fields: html`${fld({ name: 'business', label: 'Business name', required: true })}${fld({ name: 'title', label: 'Campaign title', required: true })}${fld({ name: 'description', label: 'Description', type: 'textarea', required: true, full: true })}${fld({ name: 'creative', label: 'Creative artwork', type: 'image' })}${fld({ name: 'destination', label: 'Destination URL', type: 'url', required: true, placeholder: 'https://' })}${fld({ name: 'startDate', label: 'Start date', type: 'date', required: true })}${fld({ name: 'endDate', label: 'End date', type: 'date', required: true })}${fld({ name: 'budget', label: 'Budget, KES', type: 'number', min: 0, required: true })}${fld({ name: 'contact', label: 'Contact', required: true })}${fld({ name: 'audience', label: 'Audience type', type: 'select', options: ['All members', 'Players', 'Teams and captains', 'Coaches', 'Facility owners'] })}${fld({ name: 'placements', label: 'Preferred placements', type: 'checks', options: Object.entries(AD_PLACEMENTS), full: true })}${fld({ name: 'counties', label: 'Target counties, comma separated, blank for all', full: true })}${fld({ name: 'sports', label: 'Target sports', type: 'checks', options: sportOptions(), full: true })}${fld({ name: 'draft', label: 'Save as a draft', type: 'tick' })}`, submit: 'Continue', tone: 'btn-magenta' });
+  if (!v) return;
+  await run('submitCampaign', { ...v, start: zonedISO(v.startDate, '00:00'), end: zonedISO(v.endDate, '23:00'), counties: String(v.counties || '').split(',').map(x => x.trim()).filter(Boolean) }, v.draft ? 'Draft saved.' : 'Submitted for review.').catch(() => {});
+};
+A.campaignDo = d => run('campaignAction', { id: d.id, action: d.v }, 'Campaign updated.').catch(() => {});
+A.campaignStats = async d => {
+  const a = await db.get('advertisingCampaigns', d.id);
+  openModal({ title: a.title, wide: true, body: html`${metrics([[compact(a.impressions), 'Impressions'], [compact(a.clicks), 'Clicks'], [a.impressions ? `${(a.clicks / a.impressions * 100).toFixed(2)}%` : '0%', 'Click-through'], [a.conversions || 0, 'Conversions']])}<h4 class="mt mb">Placement performance</h4>${table([{ h: 'Placement', v: r => AD_PLACEMENTS[r[0]] || r[0] }, { h: 'Impressions', right: true, v: r => r[1].impressions }, { h: 'Clicks', right: true, v: r => r[1].clicks }, { h: 'CTR', right: true, v: r => r[1].impressions ? `${(r[1].clicks / r[1].impressions * 100).toFixed(1)}%` : '0%' }], Object.entries(a.byPlacement || {}), html`<p class="small muted">No delivery yet.</p>`)}<p class="small muted mt">Audience: ${a.audience}. Counties: ${(a.counties || []).join(', ') || 'All'}. Sports: ${(a.sports || []).map(s => SPORT(s).name).join(', ') || 'All'}.</p>` }).then(() => {});
+};
+/* ----- Advertising for any member ----- */
+appRoute('/app/ads', async () => {
+  const rows = await db.list('advertisingCampaigns', { where: [['ownerId', '==', S.uid]], limit: 40 });
+  const ctr = a => a.impressions ? `${(a.clicks / a.impressions * 100).toFixed(1)}%` : '0%';
+  const imp = rows.reduce((a, c) => a + (c.impressions || 0), 0), clk = rows.reduce((a, c) => a + (c.clicks || 0), 0);
+  return page(pageHead('Advertising', 'Every campaign is reviewed before it runs.', html`<button class="btn btn-magenta" data-act="newCampaign">${ic('plus')} New campaign</button>`),
+    rows.length ? metrics([[rows.filter(a => a.status === 'active').length, 'Active'], [compact(imp), 'Impressions'], [compact(clk), 'Clicks'], [imp ? `${(clk / imp * 100).toFixed(1)}%` : '0%', 'Click-through rate']]) : '',
+    html`<div class="mt-lg"></div>`, table([{ h: 'Campaign', v: a => html`<span class="semi">${a.title}</span><br><span class="xs faint">${a.business}</span>` }, { h: 'Dates', v: a => `${fmtDate(a.start)} to ${fmtDate(a.end)}` }, { h: 'Budget', right: true, v: a => money(a.budget) }, { h: 'Impressions', right: true, v: a => compact(a.impressions) }, { h: 'Clicks', right: true, v: a => compact(a.clicks) }, { h: 'CTR', right: true, v: ctr }, { h: 'Status', v: a => badge(a.status) }, { h: '', act: true, v: a => html`${['draft', 'rejected'].includes(a.status) ? html`<button class="btn btn-sm btn-magenta" data-act="campaignDo" data-id="${a.id}" data-v="submit">Submit</button>` : ''}${a.status === 'active' ? html`<button class="btn btn-sm btn-ghost" data-act="campaignDo" data-id="${a.id}" data-v="pause">Pause</button>` : ''}${a.status === 'paused' ? html`<button class="btn btn-sm btn-ghost" data-act="campaignDo" data-id="${a.id}" data-v="resume">Resume</button>` : ''}<button class="btn btn-sm btn-ghost" data-act="campaignStats" data-id="${a.id}">Analytics</button>` }], rows, emptyState('megaphone', 'No campaigns yet', 'Reach people who play, by county and sport.')));
+}, 'Advertising');
+</script>
+</body>
+</html>

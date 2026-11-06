@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sponsorship and featured | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Sponsorship and featured | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { F, fld, run, route } from '/shared/js/ui.js';
+import { pageHead, adminPage, adminView } from '/shared/js/features.js';
+
+adminView.sponsorship = async () => {
+  const hp = (await db.get('systemSettings', 'homepage')) || {}, sections = [['games', 'Games', 'games', g => g.title], ['teams', 'Teams', 'teams', t => t.name], ['facilities', 'Facilities', 'facilities', f => f.name], ['tournaments', 'Competitions', 'tournaments', t => t.name], ['products', 'Marketplace', 'products', p => p.title], ['athletes', 'Athletes', 'playerProfiles', a => a.name], ['coaches', 'Coaches', 'coaches', c => c.name]];
+  const data = await Promise.all(sections.map(s => db.list(s[2], { limit: 60 })));
+  return html`${pageHead('Sponsorship and featured content', 'Choose what appears on the homepage. Leave blank to fill automatically from live data.', html`<a class="btn btn-ghost" href="#/admin/ads">Sponsored placements</a>`)}<div class="grid g2">${sections.map((s, i) => html`<form class="panel form" data-form="saveFeatured"><input type="hidden" name="section" value="${s[0]}">${fld({ name: 'ids', label: s[1], type: 'checks', value: hp[s[0]] || [], options: data[i].slice(0, 24).map(r => [r.id, s[3](r)]) })}<button class="btn btn-sm" type="submit" style="justify-self:start">Save ${s[1].toLowerCase()}</button></form>`)}</div>`;
+};
+F.saveFeatured = v => run('setFeatured', { section: v.section, ids: v.ids }, 'Homepage updated.');
+route('/admin/sponsorship', adminPage('sponsorship'), { shell: 'app', auth: true, admin: true, title: "Sponsorship and featured" });
+</script>
+</body>
+</html>

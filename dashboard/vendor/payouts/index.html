@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Commissions and payouts | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Commissions and payouts | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, money, pct, fmtDate } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, badge, metrics, table } from '/shared/js/ui.js';
+import { appRoute, pageHead, vendorGate } from '/shared/js/features.js';
+
+appRoute('/app/store/payouts', async () => {
+  const { gate } = await vendorGate(); if (gate) return gate;
+  const [payouts, orders] = await Promise.all([db.list('payouts', { where: [['vendorId', '==', S.uid]], orderBy: ['at', 'desc'], limit: 30 }), db.list('orders', { where: [['vendorId', '==', S.uid]], limit: 200 })]);
+  const comp = orders.filter(o => o.status === 'completed'), due = comp.filter(o => !o.payoutId), rate = pct(S.settings.commissionRate * 100, 100);
+  return page(pageHead('Commissions and payouts', `SportsHub charges ${rate}% commission on completed sales.`),
+    metrics([[money(due.reduce((a, o) => a + o.vendorNet, 0)), 'Awaiting payout'], [money(payouts.reduce((a, p) => a + p.amount, 0)), 'Paid out'], [money(comp.reduce((a, o) => a + o.commission, 0)), 'Commission to date']]),
+    html`<div class="grid g2 mt-lg"><section class="panel"><h3 class="mb">Payout history</h3>${table([{ h: 'Date', v: p => fmtDate(p.at) }, { h: 'Orders', right: true, v: p => p.orders }, { h: 'Amount', right: true, v: p => html`${money(p.amount)}${p.simulated ? html` <span class="tag sim">Simulated</span>` : ''}` }], payouts, html`<p class="small muted">No payouts yet.</p>`)}</section>
+    <section class="panel"><h3 class="mb">Commission records</h3>${table([{ h: 'Order', v: o => o.number }, { h: 'Sale', right: true, v: o => money(o.subtotal) }, { h: 'Commission', right: true, v: o => money(o.commission) }, { h: 'Payout', v: o => o.payoutId ? badge('paid') : badge('pending') }], comp, html`<p class="small muted">Commission is recorded on completed orders.</p>`)}</section></div>`);
+}, 'Commissions and payouts');
+</script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Organisation home | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Organisation home | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, money, titleCase, fmtDay } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, badge, verifiedMark, emptyState, metrics, dashHero } from '/shared/js/ui.js';
+import { appRoute, orgGate } from '/shared/js/features.js';
+
+appRoute('/app/org', async () => {
+  const { gate } = await orgGate(); if (gate) return gate;
+  const [org, ts, regs] = await Promise.all([db.get('organisations', S.uid), db.list('tournaments', { where: [['organiserId', '==', S.uid]], limit: 40 }), db.list('tournamentRegistrations', { where: [['organiserId', '==', S.uid]], limit: 200 })]);
+  const pending = regs.filter(r => r.status === 'pending');
+  return page(dashHero({ c: 'yellow', c2: 'magenta', cut: 'javelin', title: (org && org.name) || S.user.name, sub: html`${org && org.verified ? verifiedMark() : ''}<span>${(org && org.county) || ''}</span>`, action: html`<button class="btn btn-yellow" data-act="newTournament">${ic('plus')} Create a competition</button>` }),
+    metrics([[ts.length, 'Competitions'], [ts.filter(t => t.status === 'running').length, 'In progress'], [regs.length, 'Entries'], [pending.length, 'To review'], [money(regs.filter(r => r.status === 'confirmed').reduce((a, r) => a + (r.feeDue || 0), 0)), 'Entry fees expected']]),
+    html`<div class="grid g-side mt-lg"><section class="panel"><div class="panel-head"><h3>Your competitions</h3></div>${ts.length ? html`<div>${ts.map(t => html`<a class="comp-row" href="#/app/org/competitions/${t.id}" style="border-top:0;border-bottom:1px solid var(--line-2)"><span class="small semi">${fmtDay(t.start)}</span><span><span class="semi" style="display:block">${t.name}</span><span class="small muted">${t.sportName} · ${titleCase(t.format)}</span></span><span class="small nums">${t.registered}/${t.capacity}</span>${badge(t.status)}</a>`)}</div>` : emptyState('trophy', 'No competitions yet', 'Create your first competition.')}</section>
+    <aside class="panel"><div class="panel-head"><h3>Entries to review</h3><a class="small semi" href="#/app/org/registrations">All</a></div>${pending.length ? html`<div class="lines">${pending.slice(0, 6).map(r => html`<div class="row between small"><span><b>${r.entrantName}</b><br><span class="faint">${r.tournamentName}</span></span><span class="row sm"><button class="btn btn-sm btn-yellow" data-act="reviewEntry" data-id="${r.id}" data-v="1">${ic('check')}</button><button class="btn btn-sm btn-ghost" data-act="reviewEntry" data-id="${r.id}" data-v="" aria-label="Decline">${ic('x')}</button></span></div>`)}</div>` : html`<p class="small muted">Nothing waiting.</p>`}</aside></div>`);
+}, 'Organisation home');
+</script>
+</body>
+</html>

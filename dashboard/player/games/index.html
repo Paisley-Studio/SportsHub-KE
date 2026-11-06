@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>My games | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="My games | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, fmtDT } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, SPORT, badge, emptyState, table } from '/shared/js/ui.js';
+import { nowISO, appRoute, pageHead } from '/shared/js/features.js';
+
+/* ----- My games, new game ----- */
+appRoute('/app/games', async () => {
+  const [mine, hosting] = await Promise.all([db.list('gameParticipants', { where: [['uid', '==', S.uid]], orderBy: ['start', 'desc'], limit: 60 }), db.list('games', { where: [['hostId', '==', S.uid]], orderBy: ['start', 'desc'], limit: 30 })]);
+  const now = nowISO(), up = mine.filter(m => m.start > now && m.status !== 'cancelled'), past = mine.filter(m => m.start <= now || m.status === 'cancelled');
+  const cols = [{ h: 'Game', v: x => html`<a class="semi" href="#/games/${x.gameId}">${x.title}</a>` }, { h: 'Sport', v: x => SPORT(x.sportId).name }, { h: 'When', v: x => fmtDT(x.start) }, { h: 'Status', v: x => badge(x.status) }, { h: 'Membership', v: x => x.covered ? 'Covered session' : 'Not covered' }];
+  return page(pageHead('My games', '', html`<a class="btn btn-blue" href="#/app/games/new">${ic('plus')} Create a game</a>`),
+    html`<div class="stack xl"><section class="panel"><h3 class="mb">Upcoming</h3>${table(cols, up, emptyState('calendar-days', 'No upcoming games', 'Find one nearby in seconds.', html`<a class="btn" href="#/games">Find a game</a>`))}</section>
+    <section class="panel"><h3 class="mb">Hosting</h3>${table([{ h: 'Game', v: g => html`<a class="semi" href="#/games/${g.id}">${g.title}</a>` }, { h: 'When', v: g => fmtDT(g.start) }, { h: 'Players', right: true, v: g => `${g.joined}/${g.capacity}` }, { h: 'Status', v: g => badge(g.status) }], hosting, html`<p class="small muted">Games you create appear here.</p>`)}</section>
+    <section class="panel"><h3 class="mb">History</h3>${table(cols, past, html`<p class="small muted">Your played games appear here.</p>`)}</section></div>`);
+}, 'My games');
+</script>
+</body>
+</html>

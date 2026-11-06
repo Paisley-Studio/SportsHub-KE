@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Join SportsHub | SportsHub-KE</title>
+<meta name="description" content="Join as a player, team, coach, vendor, facility or organiser.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Join SportsHub | SportsHub-KE">
+<meta property="og:description" content="Join as a player, team, coach, vendor, facility or organiser.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic } from '/shared/js/core.js';
+import { auth } from '/shared/js/firebase.js';
+import { S, route } from '/shared/js/ui.js';
+import { authShell, ACCOUNT_TYPES, ACTIVE_ACCOUNT_TYPES } from '/shared/js/features.js';
+
+/* Only the account types that are fully set up today are offered. */
+route('/join', async () => {
+  const g = S.uid && !S.user ? auth.current() : null, types = ACCOUNT_TYPES.filter(t => ACTIVE_ACCOUNT_TYPES.includes(t[0]));
+  return authShell('guard', 'A young basketball team in uniform', html`<div class="auth-card wide">
+    <div class="stack"><span class="eyebrow rv f">Join SportsHub</span><h1><span class="lnr"><span>How will you use SportsHub?</span></span></h1><p class="muted rv u" style="--d:.15s;max-width:54ch">Start with one. A single account can hold more than one role, so a coach can still play on Saturdays.</p></div>
+    ${g ? html`<div class="notice c-green small">Signed in with Google as <b>${g.email}</b>. Choose how you will use SportsHub to finish setting up.</div>` : ''}
+    <div class="join-types">${types.map(([id, icon, l, d, c], i) => html`<a class="join-type c-${c} rv u" style="--d:${.2 + i * .08}s" href="#/join/${id}"><span class="avatar sq">${ic(icon)}</span><span><span class="jt">${l}</span><span class="small muted">${d}</span></span>${ic('arrow-right')}</a>`)}</div>
+    <p class="small muted rv f" style="--d:.5s">Teams, shops and organisers are coming soon. Players can already register a team from their dashboard.</p>
+    ${S.uid ? '' : html`<p class="small rv f" style="--d:.55s">Already a member? <a class="semi" href="#/signin" style="text-decoration:underline">Sign in</a></p>`}</div>`,
+    'One account. Every role you play.', 'green', 'Players find games and use eight sessions a month. Coaches build rosters. Facilities fill their empty hours.');
+}, { title: 'Join SportsHub', shell: 'auth', desc: 'Join SportsHub as a player, coach or sports facility.' });
+</script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Create a game | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Create a game | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { COUNTY_NAMES, SKILLS, esc, html, $, dayKey, zonedISO } from '/shared/js/core.js';
+import { db, callOp } from '/shared/js/firebase.js';
+import { page, S, A, F, toast, emptyState, fld, sportOptions, go, refreshSession } from '/shared/js/ui.js';
+import { appRoute, pageHead } from '/shared/js/features.js';
+
+A.gameFacility = async (d, el) => {
+  const form = el.closest('form'), sel = $('#g-res', form), ext = $('[data-ext-venue]', form);
+  ext.classList.toggle('hide', !!el.value);
+  if (!el.value) { sel.innerHTML = '<option value="">Choose a facility first</option>'; return; }
+  const res = await db.list('facilityResources', { where: [['facilityId', '==', el.value], ['active', '==', true]], limit: 30 });
+  sel.innerHTML = res.map(r => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join('');
+};
+F.createGame = async v => {
+  const start = zonedISO(v.date, v.startTime), end = zonedISO(v.date, v.endTime);
+  const r = await callOp('createGame', { ...v, start, end, required: Math.min(Number(v.required) || Number(v.capacity), Number(v.capacity)) });
+  await refreshSession();
+  toast(r.covered ? 'Game published. It is a covered session at a membership venue.' : 'Game published.', 'green');
+  go(`/games/${r.id}`);
+};
+appRoute('/app/games/new', async () => {
+  const facs = await db.list('facilities', { where: [['status', '==', 'approved']], limit: 60 });
+  const defDate = dayKey(new Date(Date.now() + 2 * 864e5));
+  if (S.user.registrationStatus !== 'paid') return page(pageHead('Create a game'), emptyState('lock', 'Complete your registration first', 'Registered members can host games.', html`<a class="btn" href="#/app/membership">Go to membership</a>`));
+  return page(pageHead('Create a game', 'Relevant players are told about it automatically.'), html`<form class="form" style="max-width:820px" data-form="createGame"><div class="form-grid">
+    ${fld({ name: 'title', label: 'Game title', required: true, full: true, placeholder: 'Saturday 7-a-side' })}
+    ${fld({ name: 'sportId', label: 'Sport', type: 'select', value: (S.profile && S.profile.sports[0]) || 'football', options: sportOptions(), required: true })}
+    ${fld({ name: 'format', label: 'Game format', placeholder: '5-a-side, doubles, lane session...' })}
+    ${fld({ name: 'date', label: 'Date', type: 'date', value: defDate, min: dayKey(new Date()), required: true })}
+    <div class="grid g2" style="gap:10px">${fld({ name: 'startTime', label: 'Start time', type: 'time', value: '16:00', required: true })}${fld({ name: 'endTime', label: 'End time', type: 'time', value: '18:00', required: true })}</div>
+    ${fld({ name: 'facilityId', label: 'Facility', type: 'select', blank: 'Another venue, not listed', options: facs.map(f => [f.id, `${f.name}, ${f.town}${f.participating ? ' (membership venue)' : ''}`]), onchange: 'gameFacility' })}
+    <div class="field"><label for="g-res">Pitch or court</label><select id="g-res" name="resourceId"><option value="">Choose a facility first</option></select><span class="hint">Booking checks for conflicts and reserves the slot.</span></div>
+    <div class="grid g2 full" data-ext-venue style="gap:14px">${fld({ name: 'venueName', label: 'Venue name' })}${fld({ name: 'county', label: 'County', type: 'select', value: S.user.county, options: COUNTY_NAMES })}</div>
+    ${fld({ name: 'capacity', label: 'Maximum participants', type: 'number', min: 2, max: 500, value: '14', required: true })}${fld({ name: 'required', label: 'Players needed to go ahead', type: 'number', min: 1, value: '10' })}
+    ${fld({ name: 'skill', label: 'Skill level', type: 'select', value: 'All levels', options: ['All levels', ...SKILLS] })}${fld({ name: 'fee', label: 'Participation fee, KES', type: 'number', min: 0, value: '0', hint: 'Separate from ground access. Paid to you.' })}
+    ${fld({ name: 'minAge', label: 'Minimum age', type: 'number', min: 0, value: '0' })}${fld({ name: 'maxAge', label: 'Maximum age', type: 'number', min: 0, value: '0', hint: '0 means no limit.' })}
+    ${fld({ name: 'visibility', label: 'Visibility', type: 'select', options: [['public', 'Public'], ['members', 'Members only'], ['private', 'Invitation only']] })}${fld({ name: 'approvalRequired', label: 'I want to approve each player', type: 'tick' })}
+    ${fld({ name: 'rules', label: 'Rules', type: 'textarea', full: true, placeholder: 'What should players bring or know?' })}</div>
+    <p class="form-err err hide"></p><button class="btn btn-blue" type="submit" style="justify-self:start">Publish game</button></form>`);
+}, 'Create a game');
+</script>
+</body>
+</html>

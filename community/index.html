@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>From the field | SportsHub-KE</title>
+<meta name="description" content="Training updates, match highlights and results.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="From the field | SportsHub-KE">
+<meta property="og:description" content="Training updates, match highlights and results.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, titleCase, timeAgo } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { S, hasRole, A, F, toast, avatar, emptyState, fld, confirmBox, run, go, renderMain, route, adSlot, pgHero } from '/shared/js/ui.js';
+
+/* ----- Community ----- */
+const postCard = (p, liked, comments) => {
+  const when = timeAgo(p.at);
+  return html`<article class="post" id="${p.id}"><div class="row nowrap">${avatar(p.author.name, '', p.author.type === 'user' ? 'sm' : 'sm sq')}<div class="grow"><span class="semi">${p.author.name}</span> <span class="xs faint">${titleCase(p.kind)} · ${when}</span></div>${S.uid === p.authorUid ? html`<button class="icon-btn" data-act="deletePost" data-id="${p.id}" aria-label="Delete post">${ic('trash-2')}</button>` : S.uid ? html`<button class="icon-btn" data-act="reportThing" data-type="post" data-id="${p.id}" data-text="${p.text.slice(0, 200)}" aria-label="Report post">${ic('flag')}</button>` : ''}</div>
+    <p style="margin-top:8px;white-space:pre-line">${p.text}</p>${p.photo ? html`<div class="pic"><img src="${p.photo}" alt="" loading="lazy"></div>` : ''}${p.video ? html`<a class="small semi" href="${p.video}" target="_blank" rel="noopener noreferrer">${ic('play')} Watch video</a>` : ''}
+    <div class="post-acts"><button class="${liked ? 'on' : ''}" data-act="likePost" data-id="${p.id}" aria-pressed="${liked ? 'true' : 'false'}">${ic('heart')} ${p.likes || 0}</button><button data-act="toggleComments" data-id="${p.id}">${ic('message-circle')} ${p.comments || 0}</button><button data-act="sharePost" data-id="${p.id}">${ic('share-2')} ${p.shares || 0}</button></div>
+    ${comments ? html`<div class="stack sm mt">${comments.map(c => html`<div class="small"><span class="semi">${c.name}</span> ${c.text} ${S.uid && c.uid !== S.uid ? html`<button class="xs faint" data-act="reportThing" data-type="comment" data-id="${c.id}" data-text="${c.text.slice(0, 200)}">Report</button>` : ''}</div>`)}${S.uid ? html`<form class="row nowrap" data-form="addComment"><input type="hidden" name="postId" value="${p.id}"><input class="input grow" name="text" placeholder="Add a comment" required maxlength="600" aria-label="Add a comment"><button class="btn btn-sm" type="submit">Post</button></form>` : ''}</div>` : ''}</article>`;
+};
+F.newPost = async (v, form) => {
+  const [t, id] = (v.as || '').split(':');
+  await run('createPost', { text: v.text, kind: v.kind, visibility: v.visibility, video: v.video, photo: v.photo, asTeam: t === 'team' ? id : '', asFacility: t === 'fac' ? id : '', asCoach: t === 'coach' }, 'Published.');
+};
+F.addComment = async v => { (S.ui.openComments = S.ui.openComments || {})[v.postId] = true; await run('commentPost', { postId: v.postId, text: v.text }); };
+A.likePost = async d => { if (!S.uid) { go('/signin'); return; } await run('toggleLike', { postId: d.id }).catch(() => {}); };
+A.sharePost = async d => {
+  const url = `${location.origin}${location.pathname}${'#/community'}`;
+  try { if (navigator.share) await navigator.share({ title: 'SportsHub-KE', url }); else { await navigator.clipboard.writeText(url); toast('Link copied.'); } } catch (e) { /* share dismissed */ }
+  if (S.uid) await run('sharePost', { postId: d.id }).catch(() => {});
+};
+A.toggleComments = d => { const o = S.ui.openComments = S.ui.openComments || {}; o[d.id] = !o[d.id]; renderMain(); };
+A.deletePost = async d => { if (await confirmBox('Delete this post?', 'It will be removed from the community feed.', 'Delete', 'btn-bad')) await run('deletePost', { id: d.id }, 'Post deleted.').catch(() => {}); };
+A.moreFeed = () => { S.ui.feedLimit = (S.ui.feedLimit || 15) + 15; renderMain(); };
+route('/community', async () => {
+  const where = S.uid ? [['status', '==', 'published'], ['visibility', 'in', ['public', 'members']]] : [['status', '==', 'published'], ['visibility', '==', 'public']];
+  const limit = S.ui.feedLimit || 15;
+  const [posts, ad] = await Promise.all([db.list('socialPosts', { where, orderBy: ['at', 'desc'], limit }), adSlot('news')]);
+  const open = S.ui.openComments || {}, likes = {}, cmts = {};
+  await Promise.all(posts.map(async p => {
+    if (S.uid) likes[p.id] = !!(await db.get('postLikes', `${p.id}_${S.uid}`));
+    if (open[p.id]) cmts[p.id] = await db.list('comments', { where: [['postId', '==', p.id], ['status', '==', 'published']], orderBy: ['at', 'asc'], limit: 30 });
+  }));
+  const teams = S.uid ? await db.list('teams', { where: [['captainId', '==', S.uid]], limit: 5 }) : [];
+  const facs = S.uid ? await db.list('facilities', { where: [['ownerId', '==', S.uid], ['status', '==', 'approved']], limit: 5 }) : [];
+  return html`${pgHero({ c: 'magenta', c2: 'blue', eye: 'Community', title: 'From the field', lede: 'Results, training, achievements and sporting events, from the people who were there.' })}<div class="wrap section tight"><div class="grid g-side"><div>
+      ${S.uid ? html`<form class="panel form" data-form="newPost"><div class="field"><label for="np-t">Share something from your sport</label><textarea id="np-t" name="text" rows="2" required maxlength="1500" placeholder="A result, a training milestone, a community event..."></textarea></div>
+        <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+        ${fld({ name: 'kind', label: 'Type', type: 'select', options: [['update', 'Training update'], ['highlight', 'Match highlight'], ['achievement', 'Achievement'], ['announcement', 'Team announcement'], ['result', 'Competition result'], ['event', 'Community event']] })}
+        ${fld({ name: 'as', label: 'Post as', type: 'select', options: [['', S.user.name], ...teams.map(t => [`team:${t.id}`, t.name]), ...facs.map(f => [`fac:${f.id}`, f.name]), ...(hasRole('coach') ? [['coach:1', 'Coach profile']] : [])] })}
+        ${fld({ name: 'visibility', label: 'Who can see this', type: 'select', options: [['public', 'Everyone'], ['members', 'Members only']] })}
+        ${fld({ name: 'video', label: 'Video link', type: 'url', placeholder: 'https://' })}</div>
+        <div class="row between">${fld({ name: 'photo', label: 'Photograph', type: 'image' })}<button class="btn btn-magenta" type="submit">Publish</button></div></form>` : html`<div class="notice c-magenta">Sign in to post, like and comment. <a class="semi" href="#/signin">Sign in</a></div>`}
+      ${posts.length ? html`<div class="mt-lg" style="border-top:1px solid var(--ink)">${posts.map(p => postCard(p, likes[p.id], cmts[p.id]))}</div>` : emptyState('newspaper', 'No posts yet', 'Share the first result or training update.')}
+      ${posts.length >= limit ? html`<div class="mt-lg" style="text-align:center"><button class="btn btn-ghost" data-act="moreFeed">Load more</button></div>` : ''}</div>
+    <aside class="stack lg">${ad ? html`<div>${ad}</div>` : ''}<div class="panel"><h3 class="mb">What belongs here</h3><p class="small muted">Results, training, achievements and sporting events. Off-topic content is removed. Everyone can report a post.</p></div></aside></div></div>`;
+}, { title: 'Community', desc: 'Training updates, match highlights and results.' });
+</script>
+</body>
+</html>

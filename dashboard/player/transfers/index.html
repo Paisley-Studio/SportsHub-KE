@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Session transfers | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Session transfers | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, fmtDate, Rules } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, A, badge, emptyState, table, fld, promptForm, run } from '/shared/js/ui.js';
+import { appRoute, pageHead } from '/shared/js/features.js';
+
+A.newTransfer = async () => {
+  const v = await promptForm({ title: 'Transfer sessions', intro: `You have ${Rules.available(S.period)} unreserved sessions.`, fields: html`${fld({ name: 'toMemberId', label: 'Recipient SportsHub ID', required: true, placeholder: 'SH-KE-001234' })}${fld({ name: 'credits', label: 'Sessions', type: 'number', min: 1, max: S.settings.maxTransferCredits, value: '1', required: true })}${fld({ name: 'reason', label: 'Reason', type: 'textarea', full: true })}`, submit: 'Send request', tone: 'btn-green' });
+  if (v) await run('requestCreditTransfer', v, 'Request sent. Sessions are held in escrow.').catch(() => {});
+};
+A.respondTransfer = d => run('respondCreditTransfer', { id: d.id, accept: !!d.v }, d.v ? 'Accepted. Waiting for administrator approval.' : 'Declined.').catch(() => {});
+A.cancelTransfer = d => run('cancelCreditTransfer', { id: d.id }, 'Cancelled. Your sessions were returned.').catch(() => {});
+appRoute('/app/transfers', async () => {
+  const rows = await db.list('membershipTransfers', { where: [['participants', 'array-contains', S.uid]], orderBy: ['createdAt', 'desc'], limit: 30 });
+  return page(pageHead('Session transfers', `Move up to ${S.settings.maxTransferCredits} unused sessions to another active member. Sessions are held in escrow, so they can never be spent twice.`, S.period ? html`<button class="btn btn-green" data-act="newTransfer">${ic('send')} Transfer sessions</button>` : ''),
+    html`<ol class="steps-mini" aria-label="Transfer process"><li class="on">1. You request</li><li class="on">2. Recipient accepts</li><li class="on">3. Administrator approves</li><li class="on">4. Ledger updated for both</li></ol>`,
+    table([{ h: 'Date', v: t => fmtDate(t.createdAt) }, { h: 'From', v: t => t.fromName }, { h: 'To', v: t => t.toName }, { h: 'Sessions', right: true, v: t => t.credits }, { h: 'Status', v: t => badge(t.status) }, { h: '', act: true, v: t => t.status === 'awaiting_recipient' && t.toUid === S.uid ? html`<button class="btn btn-sm btn-green" data-act="respondTransfer" data-id="${t.id}" data-v="1">Accept</button><button class="btn btn-sm btn-ghost" data-act="respondTransfer" data-id="${t.id}" data-v="">Decline</button>` : t.fromUid === S.uid && ['awaiting_recipient', 'awaiting_approval'].includes(t.status) ? html`<button class="btn btn-sm btn-ghost" data-act="cancelTransfer" data-id="${t.id}">Cancel</button>` : '' }], rows, emptyState('arrow-left-right', 'No transfers yet', 'Going away this month? Pass your sessions to a teammate.')));
+}, 'Session transfers');
+</script>
+</body>
+</html>

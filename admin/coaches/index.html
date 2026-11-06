@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Coach applications | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Coach applications | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, fmtDate } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { SPORT, A, badge, table, fld, promptForm, run, route } from '/shared/js/ui.js';
+import { pageHead, adminPage, adminView, REVIEW_OPTS } from '/shared/js/features.js';
+
+adminView.coaches = async () => {
+  const rows = await db.list('coachApplications', { orderBy: ['submittedAt', 'desc'], limit: 100 });
+  return html`${pageHead('Coach applications', 'Applicants must register three or more players. Approval grants verified coach privileges.')}${table([{ h: 'Applicant', v: a => html`<span class="semi">${a.name}</span><br><span class="xs faint">${a.county}${a.academy ? ` · ${a.academy}` : ''}</span>` }, { h: 'Sports', v: a => a.sports.map(s => SPORT(s).name).join(', ') }, { h: 'Experience', right: true, v: a => `${a.experienceYears} yrs` }, { h: 'Players', right: true, v: a => a.players.length }, { h: 'Submitted', v: a => fmtDate(a.submittedAt) }, { h: 'Status', v: a => badge(a.status) }, { h: '', act: true, v: a => html`<button class="btn btn-sm" data-act="reviewCoach" data-uid="${a.uid || a.id}">Review</button>` }], rows)}`;
+};
+A.reviewCoach = async d => {
+  const a = await db.get('coachApplications', d.uid);
+  const v = await promptForm({ title: `Review ${a.name}`, wide: true, intro: html`<dl class="kv small"><dt>Experience</dt><dd>${a.experience}</dd><dt>Qualifications</dt><dd>${a.qualifications}</dd><dt>Certificates</dt><dd>${(a.certificates || []).join(', ') || 'None listed'}</dd><dt>Documents</dt><dd>${(a.documents || []).length} attached</dd><dt>Players</dt><dd>${a.players.map(p => `${p.name} (${SPORT(p.sportId).name})`).join(', ')}</dd></dl>`, fields: html`${fld({ name: 'decision', label: 'Decision', type: 'select', required: true, options: REVIEW_OPTS, full: true })}${fld({ name: 'note', label: 'Note to the applicant', type: 'textarea', full: true })}`, submit: 'Record decision' });
+  if (v) await run('reviewCoachApplication', { uid: d.uid, ...v }, 'Decision recorded.').catch(() => {});
+};
+route('/admin/coaches', adminPage('coaches'), { shell: 'app', auth: true, admin: true, title: "Coach applications" });
+</script>
+</body>
+</html>

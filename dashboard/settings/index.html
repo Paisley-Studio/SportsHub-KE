@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Settings | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Settings | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { ROLE_LABEL, html, ic, titleCase, fmtDate } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, hasRole, A, F, badge, fld, promptForm, run, rolesAvailable } from '/shared/js/ui.js';
+import { appRoute, pageHead } from '/shared/js/features.js';
+
+const NOTIF_TYPES = [['game', 'Games and invitations'], ['booking', 'Bookings'], ['membership', 'Membership and sessions'], ['payment', 'Payments'], ['team', 'Teams'], ['challenge', 'Challenges'], ['transfer', 'Transfers'], ['tournament', 'Tournaments'], ['order', 'Orders'], ['social', 'Community'], ['advertising', 'Advertising']];
+F.savePrefs = async v => run('setNotifPrefs', { prefs: v }, 'Preferences saved.');
+A.requestDeletion = async () => {
+  const v = await promptForm({ title: 'Request account deletion', intro: 'Your personal data will be removed within 30 days. This cannot be undone.', fields: fld({ name: 'reason', label: 'Reason, optional', type: 'textarea', full: true }), submit: 'Request deletion', tone: 'btn-magenta' });
+  if (v) await run('requestAccountDeletion', v, 'Your request has been received.').catch(() => {});
+};
+appRoute('/app/settings', async () => {
+  const prefs = S.user.notifPrefs || {}, del = await db.get('deletionRequests', S.uid);
+  const verifs = await db.list('verificationRequests', { where: [['uid', '==', S.uid]], limit: 5 });
+  return page(pageHead('Settings', ''), html`<div class="stack xl" style="max-width:820px">
+    <section class="panel"><h3 class="mb">Roles on this account</h3><p class="small muted mb">One account can hold many roles. Add another below.</p><div class="row">${rolesAvailable().map(r => html`<span class="tag">${ROLE_LABEL[r]}</span>`)}</div>
+      ${verifs.length ? html`<div class="lines small mt">${verifs.map(v => html`<div class="row between"><span>${titleCase(v.kind)}: ${v.orgName}</span>${badge(v.status)}</div>`)}</div>` : ''}
+      <div class="row mt">${!hasRole('captain') ? html`<a class="btn btn-ghost btn-sm" href="#/app/teams/new">Register a team</a>` : ''}${!hasRole('coach') && !hasRole('coach_applicant') ? html`<a class="btn btn-ghost btn-sm" href="#/join/coach">Apply as a coach</a>` : ''}${!hasRole('vendor') && !hasRole('vendor_applicant') ? html`<a class="btn btn-ghost btn-sm" href="#/join/vendor">Open a store</a>` : ''}<a class="btn btn-ghost btn-sm" href="#/join/facility">List a facility</a>${!hasRole('organiser') ? html`<a class="btn btn-ghost btn-sm" href="#/join/organisation">Become an organiser</a>` : ''}${!hasRole('scout') ? html`<a class="btn btn-ghost btn-sm" href="#/join/scout">Become a scout</a>` : ''}</div></section>
+    <section class="panel"><h3 class="mb">Notification preferences</h3><form class="form" data-form="savePrefs"><div class="form-grid">${NOTIF_TYPES.map(([k, l]) => fld({ name: k, label: l, type: 'tick', value: prefs[k] !== false }))}</div><p class="xs faint">In-app today. Email, SMS and push providers connect through the same preferences.</p><button class="btn btn-sm" type="submit" style="justify-self:start">Save preferences</button></form></section>
+    <section class="panel"><h3 class="mb">Your data</h3><p class="small muted mb">Under the Kenya Data Protection Act, 2019 you can ask us to delete your personal data. Financial records may be kept where the law requires.</p>${del ? html`<div class="row">${badge(del.status)}<span class="small muted">Requested ${fmtDate(del.at)}</span></div>` : html`<button class="btn btn-bad btn-sm" data-act="requestDeletion">Request account deletion</button>`} <a class="small semi" href="#/legal/privacy" style="margin-left:10px">Privacy policy</a></section>
+    <section class="panel"><button class="btn btn-ghost" data-act="signOut">${ic('log-out')} Sign out</button></section></div>`);
+}, 'Settings');
+</script>
+</body>
+</html>

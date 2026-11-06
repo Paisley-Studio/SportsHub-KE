@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SportsHub-KE | One platform. Every sport. Every player.</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="SportsHub-KE | One platform. Every sport. Every player.">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, $, Rules } from '/shared/js/core.js';
+import { S, onMount, go, route } from '/shared/js/ui.js';
+import { nowISO, authShell, ACCOUNT_TYPES, ACTIVE_ACCOUNT_TYPES, joinForms } from '/shared/js/features.js';
+
+const JOIN_PHOTO = { player: 'footballer', coach: 'runner', facility: 'tennis' };
+const JOIN_TITLE = { player: 'Join as a player.', coach: 'Apply as a coach.', facility: 'List your facility.' };
+const JOIN_LINE = {
+  player: ['Turn up. Play. Get better.', 'Tell us your sports, level and when you are free. We use it to put the right games in front of you.'],
+  coach: ['Coach the players you already have.', 'Apply with at least three players. Our team reviews every application before coach tools unlock.'],
+  facility: ['Fill the hours that sit empty.', 'List your pitches and courts with their hours and prices. Teams and players nearby can then book you.']
+};
+route('/join/:type', async ({ type }) => {
+  const def = ACCOUNT_TYPES.find(a => a[0] === type);
+  if (!def || !ACTIVE_ACCOUNT_TYPES.includes(type)) { go('/join', true); return undefined; }
+  S.pageTitle = `Join as ${def[2].toLowerCase()}`;
+  onMount(() => {
+    const dob = $('input[name=dob]'), block = $('[data-minor-block]');
+    if (dob && block) dob.addEventListener('change', () => { const under = dob.value && Rules.ageOn(dob.value, nowISO()) < 18; block.classList.toggle('hide', !under); });
+  });
+  return authShell(JOIN_PHOTO[type], '', html`<div class="auth-card wide"><a class="small muted row sm" href="#/join">${ic('arrow-left')} All account types</a>
+    <div class="stack sm"><span class="eyebrow c-${def[4]}">${def[2]}</span><h1><span class="lnr"><span>${JOIN_TITLE[type]}</span></span></h1><p class="muted" style="max-width:56ch">${def[3]}</p></div>
+    <div class="rv u" style="--d:.15s">${joinForms[type]()}</div></div>`, JOIN_LINE[type][0], def[4], JOIN_LINE[type][1]);
+}, { shell: 'auth' });
+</script>
+</body>
+</html>

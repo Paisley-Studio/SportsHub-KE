@@ -1,0 +1,16 @@
+node_modules/
+.firebase/
+.firebaserc
+functions/.env
+worker/.dev.vars
+worker/.wrangler/
+.wrangler/
+functions/.env.*
+!functions/.env.example
+firebase.test.json
+*.local
+*-debug.log
+ui-debug.log
+.DS_Store
+worker/key.json
+worker/upload-secret.cjs

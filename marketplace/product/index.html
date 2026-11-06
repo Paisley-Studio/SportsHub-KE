@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SportsHub-KE | One platform. Every sport. Every player.</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="SportsHub-KE | One platform. Every sport. Every player.">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { CATEGORY_ICON, html, raw, ic, money } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { S, F, toast, stars, fld, go, notFound, route } from '/shared/js/ui.js';
+import { saveCart } from '/shared/js/features.js';
+
+F.addToCart = async v => {
+  if (!S.uid) { S.afterLogin = location.pathname + location.search; toast('Sign in to add items to your cart.'); go('/signin'); return; }
+  const line = S.cart.find(i => i.productId === v.productId && i.size === (v.size || '') && i.colour === (v.colour || ''));
+  if (line) line.qty += Number(v.qty || 1); else S.cart.push({ productId: v.productId, qty: Number(v.qty || 1), size: v.size || '', colour: v.colour || '' });
+  await saveCart();
+  toast('Added to your cart.', 'magenta');
+};
+route('/marketplace/product/:id', async ({ id }) => {
+  const p = await db.get('products', id);
+  if (!p) return notFound();
+  S.pageTitle = p.title;
+  const reviews = await db.list('reviews', { where: [['targetType', '==', 'product'], ['targetId', '==', id]], limit: 10 });
+  const out = p.stock < 1;
+  return html`<div class="pg-hero" style="padding-bottom:0;--c:var(--magenta);--c2:var(--yellow)"></div><div class="wrap section tight c-magenta"><a class="small muted" href="#/marketplace">${ic('arrow-left')} Marketplace</a>
+    <div class="grid g-5-7 mt"><div class="prod"><div class="pic" style="margin:0">${p.photo ? html`<img src="${p.photo}" alt="${p.title}">` : html`<span class="noimg">${ic(CATEGORY_ICON[p.category] || 'package')}</span>`}</div></div>
+    <form class="stack" data-form="addToCart" data-id="${p.id}"><input type="hidden" name="productId" value="${p.id}"><span class="eyebrow">${p.category}</span><h1 style="font-size:clamp(1.7rem,3vw,2.5rem)">${p.title}</h1>
+      <a class="small semi" href="#/marketplace/store/${p.storeId}">Sold by ${p.storeName}</a>
+      <div class="row"><span class="price" style="font-size:1.5rem">${money(p.salePrice || p.price)}</span>${p.salePrice ? html`<span class="was">${money(p.price)}</span>` : ''}</div>
+      ${p.reviewCount ? html`<div class="row sm">${stars(p.rating)}<span class="small muted">${p.reviewCount} reviews</span></div>` : ''}
+      <p class="muted">${p.description}</p>
+      ${p.sizes.length ? fld({ name: 'size', label: 'Size', type: 'select', options: p.sizes, required: true }) : ''}
+      ${p.colours.length ? fld({ name: 'colour', label: 'Colour', type: 'select', options: p.colours, required: true }) : ''}
+      ${fld({ name: 'qty', label: 'Quantity', type: 'number', value: '1', min: 1, max: Math.max(1, p.stock), required: true })}
+      <span class="small ${p.stock < 5 ? 'semi' : 'muted'}">${out ? 'Out of stock' : `${p.stock} in stock`}</span>
+      <div class="row"><button class="btn btn-magenta" type="submit" ${out ? raw('disabled') : ''}>${ic('shopping-bag')} Add to cart</button>${S.uid && S.uid !== p.vendorId ? html`<button type="button" class="btn btn-ghost" data-act="contactSeller" data-v="${p.vendorId}" data-title="${p.storeName}">Ask the seller</button>` : ''}<button type="button" class="btn btn-ghost" data-act="reportThing" data-type="product" data-id="${p.id}" data-text="${p.title}">${ic('flag')}</button></div></form></div>
+    <div class="panel section tight"><div class="panel-head"><h3>Customer reviews</h3>${S.uid ? html`<button class="btn btn-ghost btn-sm" data-act="writeReview" data-type="product" data-id="${p.id}">Review this product</button>` : ''}</div>${reviews.length ? html`<div class="lines">${reviews.map(r => html`<div>${stars(r.rating)}<p class="small">${r.text}</p><span class="xs faint">${r.name}, verified purchase</span></div>`)}</div>` : html`<p class="small muted">No reviews yet. Only customers with a completed order can review.</p>`}</div></div>`;
+});
+</script>
+</body>
+</html>

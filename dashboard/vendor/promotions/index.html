@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Promotions | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Promotions | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, money, pct } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, F, table, fld, run } from '/shared/js/ui.js';
+import { appRoute, pageHead, vendorGate } from '/shared/js/features.js';
+
+F.storePromo = v => run('updateStore', v, 'Banner saved.');
+appRoute('/app/store/promotions', async () => {
+  const { st, gate } = await vendorGate(); if (gate) return gate;
+  const rows = (await db.list('products', { where: [['vendorId', '==', S.uid], ['status', '==', 'active']], limit: 100 })).filter(p => p.salePrice);
+  return page(pageHead('Promotions', 'Store banners and sale prices. Reach more people with a reviewed campaign.', html`<a class="btn btn-ghost" href="#/app/ads">${ic('megaphone')} Advertising</a>`), html`<form class="form" data-form="storePromo" style="max-width:640px">${fld({ name: 'promotion', label: 'Store banner message', value: st.promotion || '', placeholder: 'Free delivery in Kisumu this weekend' })}<button class="btn btn-magenta" type="submit" style="justify-self:start">Save banner</button></form>
+    <div class="panel mt-lg"><h3 class="mb">Products on offer</h3>${table([{ h: 'Product', v: p => p.title }, { h: 'Regular', right: true, v: p => money(p.price) }, { h: 'Sale', right: true, v: p => money(p.salePrice) }, { h: 'Discount', right: true, v: p => `${100 - pct(p.salePrice, p.price)}%` }], rows, html`<p class="small muted">Add a sale price to a product to feature it here.</p>`)}</div>`);
+}, 'Promotions');
+</script>
+</body>
+</html>

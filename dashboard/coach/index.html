@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Coach home | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Coach home | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, pct, fmt, fmtDT, fmtTime, fmtDay, dayKey, initials, timeAgo } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, S, SPORT, sportC, verifiedMark, adSlot, dashHero, hbars } from '/shared/js/ui.js';
+import { nowISO, appRoute, coachGate } from '/shared/js/features.js';
+
+/* Coach home: who is waiting, what is on this week, who is turning up, and the squad. */
+const weekStrip = items => {
+  const days = Array.from({ length: 7 }, (_, i) => new Date(Date.now() + i * 864e5)), today = dayKey(new Date());
+  return html`<div class="week">${days.map(d => { const k = dayKey(d), ev = items.filter(t => dayKey(t.start) === k); return html`<div class="wd ${k === today ? 'today' : ''}"><div class="h">${fmt(d, { weekday: 'short' })}<b>${fmt(d, { day: 'numeric' })}</b></div>${ev.length ? ev.map((t, i) => html`<span class="ev" style="animation-delay:${i * 60}ms" title="${t.title}"><b>${fmtTime(t.start)}</b><span>${t.title}</span></span>`) : html`<span class="none">No session</span>`}</div>`; })}</div>`;
+};
+appRoute('/app/coach', async () => {
+  const { co, gate } = await coachGate(); if (gate) return gate;
+  const [roster, training, reqs, ad] = await Promise.all([db.list('coachRoster', { where: [['coachId', '==', S.uid], ['status', '==', 'active']], limit: 80 }), db.list('trainingSessions', { where: [['ownerId', '==', S.uid]], limit: 60 }), db.list('coachRequests', { where: [['coachId', '==', S.uid], ['status', '==', 'pending']], limit: 20 }), adSlot('coach_dash')]);
+  const now = nowISO(), up = training.filter(t => t.start > now).sort((a, b) => a.start > b.start ? 1 : -1), past = training.filter(t => t.start <= now).sort((a, b) => a.start < b.start ? 1 : -1);
+  const attended = t => Object.values(t.attendance || {}).filter(Boolean).length;
+  const attRate = past.length ? pct(past.reduce((a, t) => a + attended(t), 0), past.reduce((a, t) => a + (t.members || []).length, 0)) : null;
+  const weekEnd = new Date(Date.now() + 7 * 864e5).toISOString(), thisWeek = up.filter(t => t.start < weekEnd);
+  const bySport = {}; roster.forEach(r => { (bySport[r.sportId || 'other'] = bySport[r.sportId || 'other'] || []).push(r); });
+  return page(dashHero({ c: 'yellow', kick: 'Coach', title: `Coach ${co.name.split(' ')[0]}`, sub: html`${verifiedMark()}<span>${(co.sports || []).map(s => SPORT(s).name).join(' · ')}</span>${co.academy ? html`<span>${ic('building-2')} ${co.academy}</span>` : ''}${co.area || co.county ? html`<span>${ic('map-pin')} ${co.area || co.county}</span>` : ''}`, action: html`<button class="btn btn-yellow" data-act="newTraining" data-type="coach" data-id="${S.uid}">${ic('plus')} Schedule training</button><a class="btn btn-ghost" href="#/app/coach/roster">Roster</a>` }),
+    html`<div class="figs mb" style="margin-bottom:36px"><div><b data-countup>${roster.length}</b><span>Players in your care</span></div><div><b data-countup>${thisWeek.length}</b><span>Sessions this week</span></div><div><b>${attRate === null ? '–' : `${attRate}%`}</b><span>Attendance, all sessions</span></div><a class="${reqs.length ? 'warn' : ''}" href="#/app/coach/roster"><b data-countup>${reqs.length}</b><span>Players waiting</span></a><div><b>${co.accepting ? 'Open' : 'Closed'}</b><span>New player requests</span></div></div>
+    <div class="dgrid"><div class="dcol">
+      ${reqs.length ? html`<section><div class="blk-h"><h2>Players asking to join you</h2><span class="k">${reqs.length} waiting</span></div><div class="queue">${reqs.map(r => html`<div class="qi"><div style="min-width:0"><div class="q-t">${r.name}</div><div class="q-s">${r.message ? `"${r.message}"` : 'No message'}${r.at || r.createdAt ? ` · ${timeAgo(r.at || r.createdAt)}` : ''}</div></div><button class="btn btn-sm btn-yellow" data-act="reviewCoachReq" data-id="${r.id}" data-v="1">Accept</button><button class="btn btn-sm btn-ghost" data-act="reviewCoachReq" data-id="${r.id}" data-v="">Decline</button></div>`)}</div></section>` : ''}
+      <section class="c-yellow"><div class="blk-h"><h2>This week</h2><a href="#/app/coach/training">All training</a></div>${weekStrip(up)}</section>
+      <section class="panel"><div class="panel-head"><h3>Upcoming sessions</h3><a href="#/app/coach/training">Manage</a></div>
+        ${up.length ? html`<div class="agenda">${up.slice(0, 5).map((t, i) => html`<div class="ag ${i === 0 ? 'soon' : ''} c-yellow"><span class="dt"><b>${fmt(t.start, { day: 'numeric' })}</b><span>${fmt(t.start, { month: 'short' })}</span></span><span class="what"><b>${t.title}</b><span>${fmtDay(t.start)}, ${fmtTime(t.start)}${t.venue ? ` · ${t.venue}` : ''}</span></span><span class="small muted nums">${(t.members || []).length} invited</span></div>`)}</div>`
+          : html`<p class="small muted">Nothing scheduled. Plan the next session and your players are notified.</p>`}</section>
+      ${past.length ? html`<section class="panel"><div class="panel-head"><h3>Who turned up</h3><span class="small muted">Last ${Math.min(6, past.length)} sessions</span></div>${hbars(past.slice(0, 6).map(t => [`${fmt(t.start, { day: 'numeric', month: 'short' })} · ${t.title}`, pct(attended(t), (t.members || []).length)]), 'var(--yellow)', v => `${v}%`)}</section>` : ''}
+      ${ad}
+    </div><aside class="dcol" style="gap:28px">
+      <div><div class="blk-h"><span class="k">Your squad</span><a href="#/app/coach/roster">Manage</a></div>
+        ${roster.length ? Object.entries(bySport).map(([sid, list]) => html`<div class="mb"><div class="small semi row sm ${sportC(sid)}" style="margin-bottom:4px"><span class="sport-pill">${SPORT(sid).name}</span><span class="faint">${list.length}</span></div><div class="side-list">${list.slice(0, 6).map(r => html`<div class="row nowrap" style="gap:12px"><span class="avatar sm">${initials(r.name)}</span><span class="grow small semi clip">${r.name}</span><span class="xs faint">${r.position || (r.age ? `${r.age} yrs` : '')}</span></div>`)}</div></div>`) : html`<p class="small muted">Your approved players appear here.</p>`}</div>
+      <div class="panel"><h3 class="mb" style="font-size:1rem">Your public profile</h3><dl class="kv small"><dt>Experience</dt><dd>${co.experienceYears || 0} years</dd><dt>Players listed</dt><dd>${co.playerCount || roster.length}</dd><dt>Status</dt><dd>${co.accepting ? 'Accepting players' : 'Not accepting'}</dd></dl><div class="row mt"><a class="btn btn-ghost btn-sm" href="#/coaches/${S.uid}">View profile</a><a class="btn btn-ghost btn-sm" href="#/app/coach/academy">Edit academy</a></div></div>
+    </aside></div>`);
+}, 'Coach home');
+</script>
+</body>
+</html>

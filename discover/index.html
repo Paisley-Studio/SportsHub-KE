@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Discover | SportsHub-KE</title>
+<meta name="description" content="Games, teams, coaches and facilities ranked for you.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Discover | SportsHub-KE">
+<meta property="og:description" content="Games, teams, coaches and facilities ranked for you.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, fmtDate, dayKey, scoreGame, scoreTeam } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { S, A, toast, avatar, emptyState, sectionHead, renderMain, route, adSlot, pgHero } from '/shared/js/ui.js';
+import { qUpcoming, pubProfilesQ, gameRow, teamLine, coachLine, facilityPlace } from '/shared/js/features.js';
+
+A.useLocation = async () => {
+  if (!navigator.geolocation) { toast('Location is not available on this device.', 'yellow'); return; }
+  await new Promise(res => navigator.geolocation.getCurrentPosition(p => { S.origin = { lat: p.coords.latitude, lng: p.coords.longitude, precise: true }; toast('Using your location for distance. It stays on this device.'); renderMain().then(res); }, () => { toast('Location permission was declined. We will use your county.', 'yellow'); res(); }, { timeout: 8000 }));
+};
+/* ----- Discover ----- */
+route('/discover', async () => {
+  const [games, teams, coaches, facilities, comps, players] = await Promise.all([
+    db.list('games', qUpcoming([], 40)), db.list('teams', { where: [['recruiting', '==', true]], limit: 40 }), db.list('coaches', { where: [['verified', '==', true], ['accepting', '==', true]], limit: 10 }),
+    db.list('facilities', { where: [['status', '==', 'approved']], limit: 20 }), db.list('tournaments', { where: [['status', '==', 'open']], limit: 6 }), db.list('playerProfiles', pubProfilesQ([], 40))
+  ]);
+  const prof = S.profile, ad = await adSlot('game_discovery');
+  const rank = prof ? [...games].sort((a, b) => scoreGame(b, prof, S.origin).score - scoreGame(a, prof, S.origin).score) : games;
+  const today = dayKey(new Date()), todays = games.filter(g => dayKey(g.start) === today);
+  const weekend = games.filter(g => [0, 6].includes(new Date(new Date(g.start).getTime() + 3 * 36e5).getUTCDay()));
+  const teamRank = prof ? teams.map(t => ({ t, m: scoreTeam(t, prof) })).sort((a, b) => b.m.score - a.m.score).slice(0, 5) : teams.slice(0, 5).map(t => ({ t, m: { reasons: [] } }));
+  const similar = prof ? players.filter(p => p.id !== S.uid && (p.sports || []).some(s => prof.sports.includes(s))).sort((a, b) => (b.county === prof.county) - (a.county === prof.county)).slice(0, 5) : players.slice(0, 5);
+  return html`${pgHero({ c: 'blue', c2: 'green', eye: 'Discover', title: prof ? `Picked for ${prof.name.split(' ')[0]}` : 'What is on near you', lede: prof ? `Ranked using your sports, ${prof.county}, your availability and your level. Every match shows why it was suggested.` : 'Sign in to see recommendations ranked by distance, sport, availability and level.', cut: 'kick', action: html`<button class="btn btn-ghost on-dark" data-act="useLocation">${ic('locate')} Use my location</button>` })}<div class="wrap section tight">
+    ${ad}
+    <div class="grid g-side mt-lg">
+      <div class="stack xl">
+        <section>${sectionHead('blue', 'Recommended games', prof ? 'Best matches for you' : 'Coming up', ['#/games', 'Find games'])}${rank.length ? html`<div class="board">${rank.slice(0, 6).map(g => gameRow(g))}</div>` : emptyState('calendar-days', 'No games listed', 'Nothing is open right now.')}</section>
+        <section>${sectionHead('blue', 'Today', 'Open games today')}${todays.length ? html`<div class="board">${todays.map(g => gameRow(g))}</div>` : html`<p class="muted small">No games left today. Try this weekend.</p>`}</section>
+        <section>${sectionHead('blue', 'This weekend', 'Games this weekend')}${weekend.length ? html`<div class="board">${weekend.slice(0, 5).map(g => gameRow(g))}</div>` : html`<p class="muted small">Nothing listed for this weekend yet.</p>`}</section>
+      </div>
+      <aside class="stack lg">
+        <div class="panel"><div class="panel-head"><h3>Teams nearby looking for players</h3></div><div class="lines">${teamRank.map(({ t, m }) => html`<div>${teamLine(t, m.reasons)}</div>`)}</div></div>
+        <div class="panel"><div class="panel-head"><h3>Coaches accepting players</h3></div><div class="lines">${coaches.slice(0, 4).map(c => html`<div>${coachLine(c)}</div>`)}</div></div>
+        <div class="panel"><div class="panel-head"><h3>Facilities with open slots</h3></div>${facilities.slice(0, 4).map(facilityPlace)}</div>
+        <div class="panel"><div class="panel-head"><h3>Tournaments accepting entries</h3></div><div class="lines">${comps.map(t => html`<div><a class="line-row" href="#/tournaments/${t.id}"><span class="grow"><span class="t semi" style="display:block">${t.name}</span><span class="small muted">${t.sportName} · ${fmtDate(t.start)}</span></span></a></div>`)}</div></div>
+        <div class="panel"><div class="panel-head"><h3>Players with similar interests</h3></div><div class="lines">${similar.map(p => html`<div><a class="line-row" href="#/players/${p.id}">${avatar(p.name, p.photo, 'sm')}<span class="grow"><span class="t semi" style="display:block">${p.name}</span><span class="small muted">${p.town}, ${p.skill}</span></span></a></div>`)}</div></div>
+      </aside></div></div>`;
+}, { title: 'Discover', desc: 'Games, teams, coaches and facilities ranked for you.' });
+</script>
+</body>
+</html>

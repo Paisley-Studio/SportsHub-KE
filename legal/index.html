@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SportsHub-KE | One platform. Every sport. Every player.</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="SportsHub-KE | One platform. Every sport. Every player.">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html } from '/shared/js/core.js';
+import { page, S, notFound, route, pgHero } from '/shared/js/ui.js';
+
+/* ----- Legal ----- */
+const LEGAL = {
+  privacy: ['Privacy and data protection', [['What we collect', 'Your name, contact details, date of birth, county and town, sporting preferences, attendance and payment records. We collect only what is needed to run the platform.'], ['Why we collect it', 'To create your account, recommend nearby games, teams and facilities, manage your membership and keep the community safe. Your location supports nearby discovery only.'], ['What others can see', 'Your phone number, date of birth and exact location are never shown publicly. You choose whether your profile is public, members-only or private.'], ['Your rights', 'Under the Kenya Data Protection Act, 2019 you may access, correct or request deletion of your data, object to processing, and withdraw consent. Use Settings to request deletion. Financial records may be retained where the law requires.'], ['Security', 'Access is restricted by role, sensitive actions are logged in an audit trail, and payment credentials are never stored by this application.']]],
+  terms: ['Terms and policies', [['Membership', 'The registration fee is one time. The monthly fee provides the session allowance shown at checkout for one membership month.'], ['Sessions', 'A session is used only on verified attendance. Unused sessions expire at the end of the month. Access depends on venue availability and participation.'], ['Cancellation policy', 'Cancel before the published window at no cost. Late cancellations and no-shows record a strike but do not use a session. Reaching the strike limit temporarily pauses new bookings.'], ['Transfers', 'Session transfers need acceptance by an active recipient and administrator approval. Credits are held in escrow until completed, and every transfer is audited.'], ['Marketplace', 'Sellers are verified but remain responsible for their goods. Disputes can be raised from your orders page.'], ['Conduct', 'Harassment, fraud and unsafe behaviour can lead to suspension.']]],
+  minors: ['Young athletes', [['Guardian consent', 'Players under 18 must register with the name and phone number of a parent or guardian, who gives consent. Our verification team confirms it.'], ['Protected profiles', 'Profiles of players under 18 do not appear in public search or athlete listings. Precise location is never stored on the public profile.'], ['Contact', 'Only verified coaches and team officials linked to a young athlete can message them. Scouts can send a contact request only after guardian consent has been verified, and it is reviewed through the guardian.'], ['Restrictions', 'Players under 18 cannot host open games, register as captain, or be added to open groups.']]]
+};
+route('/legal/:page', async ({ page }) => {
+  const doc = LEGAL[page]; if (!doc) return notFound();
+  S.pageTitle = doc[0];
+  return html`${pgHero({ c: 'blue', c2: 'green', eye: 'Trust', title: doc[0] })}<div class="wrap section tight" style="max-width:780px"><div class="stack lg">${doc[1].map(([h, t]) => html`<section class="panel"><h3 class="mb">${h}</h3><p class="muted">${t}</p></section>`)}</div></div>`;
+});
+</script>
+</body>
+</html>

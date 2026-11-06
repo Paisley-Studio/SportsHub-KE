@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pitches and courts | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Pitches and courts | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html, ic, money } from '/shared/js/core.js';
+import { db } from '/shared/js/firebase.js';
+import { page, SPORT, A, table, fld, confirmBox, promptForm, run } from '/shared/js/ui.js';
+import { appRoute, pageHead, facilityGate, facSwitch, facStatus } from '/shared/js/features.js';
+
+A.editResource = async d => {
+  const r = d.id ? await db.get('facilityResources', d.id) : { memberEligible: true, open: 6, close: 22, sportIds: [] }, f = await db.get('facilities', d.f);
+  const v = await promptForm({ title: d.id ? 'Edit space' : 'Add a space', wide: true, fields: html`${fld({ name: 'name', label: 'Name', value: r.name || '', required: true, full: true })}${fld({ name: 'hourlyRate', label: 'KES per hour', type: 'number', min: 0, value: r.hourlyRate ?? '', required: true })}${fld({ name: 'capacity', label: 'Capacity', type: 'number', min: 0, value: r.capacity ?? '' })}${fld({ name: 'open', label: 'Opening hour, 0 to 23', type: 'number', min: 0, max: 23, value: r.open, required: true })}${fld({ name: 'close', label: 'Closing hour, 1 to 24', type: 'number', min: 1, max: 24, value: r.close, required: true })}${fld({ name: 'sportIds', label: 'Sports', type: 'checks', value: r.sportIds, options: (f.sportIds || []).map(s => [s, SPORT(s).name]), full: true })}${fld({ name: 'memberEligible', label: 'Eligible for SportsHub membership sessions', type: 'tick', value: r.memberEligible, full: true })}${fld({ name: 'approvalRequired', label: 'External bookings need my approval', type: 'tick', value: r.approvalRequired, full: true })}`, submit: 'Save', tone: 'btn-green' });
+  if (v) await run('upsertResource', { facilityId: d.f, id: d.id || undefined, ...v }, 'Saved.').catch(() => {});
+};
+A.removeResource = async d => { if (await confirmBox('Remove this space?', 'It can no longer be booked.', 'Remove', 'btn-bad')) await run('removeResource', { id: d.id }, 'Removed.').catch(() => {}); };
+appRoute('/app/facility/pitches', async () => {
+  const { f, mine, gate } = await facilityGate(); if (gate) return gate;
+  const rows = await db.list('facilityResources', { where: [['facilityId', '==', f.id], ['active', '==', true]], limit: 40 });
+  return page(pageHead('Pitches and courts', 'Each space has its own availability and booking configuration.', html`<button class="btn btn-green" data-act="editResource" data-f="${f.id}">${ic('plus')} Add a space</button>`), facSwitch(f, mine), facStatus(f),
+    table([{ h: 'Space', v: r => html`<span class="semi">${r.name}</span>` }, { h: 'Sports', v: r => (r.sportIds || []).map(s => SPORT(s).name).join(', ') }, { h: 'Hours', v: r => `${r.open}:00 to ${r.close}:00` }, { h: 'Rate', right: true, v: r => `${money(r.hourlyRate)}/hr` }, { h: 'Membership', v: r => r.memberEligible && f.participating ? html`<span class="badge ok">Covered</span>` : html`<span class="badge">Not covered</span>` }, { h: 'Approval', v: r => r.approvalRequired ? 'Required' : 'Instant' }, { h: '', act: true, v: r => html`<button class="btn btn-sm btn-ghost" data-act="editResource" data-f="${f.id}" data-id="${r.id}">Edit</button><button class="btn btn-sm btn-ghost" data-act="removeResource" data-id="${r.id}" aria-label="Remove ${r.name}">${ic('trash-2')}</button>` }], rows));
+}, 'Pitches and courts');
+</script>
+</body>
+</html>

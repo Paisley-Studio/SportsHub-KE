@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en-KE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Facility profile | SportsHub-KE</title>
+<meta name="description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta name="theme-color" content="#FFFAF2">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="SportsHub-KE">
+<meta property="og:title" content="Facility profile | SportsHub-KE">
+<meta property="og:description" content="SportsHub-KE. One platform. Every sport. Every player.">
+<meta property="og:image" content="/assets/photos/brand-banner.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/assets/branding/sportshub-symbol.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared/css/sportshub.css">
+<link rel="modulepreload" href="/shared/js/ui.js">
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js" crossorigin>
+<link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js" crossorigin>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div id="bar"></div>
+<div id="root"><main id="main" tabindex="-1"></main></div>
+<div id="modal-root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<noscript><div class="wrap section"><h1>SportsHub-KE</h1><p>One platform. Every sport. Every player. Please enable JavaScript to use the platform.</p></div></noscript>
+<script type="module">
+import { html } from '/shared/js/core.js';
+import { page, F, fld, run } from '/shared/js/ui.js';
+import { appRoute, pageHead, facilityGate, facSwitch } from '/shared/js/features.js';
+
+F.saveFacility = v => { const { photo, ...rest } = v; return run('updateFacility', { ...rest, amenities: String(v.amenities || '').split(','), photos: photo ? [photo] : [] }, 'Facility saved.'); };
+appRoute('/app/facility/profile', async () => {
+  const { f, mine, gate } = await facilityGate(); if (gate) return gate;
+  return page(pageHead('Facility profile', ''), facSwitch(f, mine), html`<form class="form" style="max-width:820px" data-form="saveFacility"><input type="hidden" name="id" value="${f.id}"><div class="form-grid">${fld({ name: 'name', label: 'Name', value: f.name, required: true, full: true })}${fld({ name: 'location', label: 'Location', value: f.location })}${fld({ name: 'hours', label: 'Opening hours', value: f.hours })}${fld({ name: 'contactPhone', label: 'Contact phone', value: f.contactPhone })}${fld({ name: 'contactEmail', label: 'Contact email', type: 'email', value: f.contactEmail })}${fld({ name: 'amenities', label: 'Amenities, comma separated', value: (f.amenities || []).join(', '), full: true })}${fld({ name: 'description', label: 'Description', type: 'textarea', value: f.description, full: true })}${fld({ name: 'rules', label: 'Facility rules', type: 'textarea', value: f.rules, full: true })}${fld({ name: 'photo', label: 'Main photograph', type: 'image', value: (f.photos || [])[0] || '' })}${fld({ name: 'settlementAgreed', label: 'I accept the SportsHub membership settlement terms', type: 'tick', value: f.settlementAgreed, hint: 'Administrators confirm participation.' })}</div><button class="btn" type="submit" style="justify-self:start">Save</button></form>`);
+}, 'Facility profile');
+</script>
+</body>
+</html>
